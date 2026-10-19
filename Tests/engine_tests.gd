@@ -17,10 +17,10 @@ class GoTo extends Behavior:
 			var state := _engage(entity, entity.combat.target)
 			if state != NO_ENGAGE:
 				return state
-		if entity.current_grid_pos == goal and not entity.movement.is_moving():
+		if entity.movement.is_waiting() or entity.current_grid_pos == goal and not entity.movement.is_moving():
 			return Id.IDLE
 		entity.movement.request_goal(goal)
-		return Id.MOVING
+		return Id.MOVING if entity.movement.is_moving() else Id.IDLE
 
 var game: Node
 var failures: Array[String] = []
@@ -35,6 +35,9 @@ func _run() -> void:
 		"test_ranged_holds_at_range",
 		"test_ranged_recoils_when_shooting",
 		"test_melee_charges_while_attacking",
+		"test_units_attack_while_moving",
+		"test_friendly_units_pass_each_other",
+		"test_units_give_up_on_a_taken_tile",
 		"test_ganging_up_doesnt_multiply_knockback",
 		"test_pushes_dont_stack_into_a_launch",
 		"test_line_of_sight_blocks_detection",
@@ -152,6 +155,39 @@ func test_melee_charges_while_attacking() -> void:
 	gap = hitter.global_position.distance_to(dummy.global_position)
 	_check(gap < hitter.movement.radius + dummy.movement.radius + 12.0, "it follows the target as it gets knocked back (%.1f px apart)" % gap)
 	_check(dummy.global_position.x - start.x < 64.0, "but doesn't plough it across the map (%.1f px)" % (dummy.global_position.x - start.x))
+
+func test_units_attack_while_moving() -> void:
+	var hitter := _spawn("Melee", Vector2i(6, 12), Entity.Team.PLAYER, AttackerBehavior.new())
+	var dummy := _spawn("Melee", Vector2i(9, 12), Entity.Team.ENEMY, Behavior.new())
+	dummy.health.max_health = 1000.0
+	dummy.health.current_health = 1000.0
+	await _wait(1.0)
+	var left_attacking := false
+	var hits_on_the_move := 0
+	var hp := dummy.health.current_health
+	for i in 4 * FPS:
+		await process_frame
+		left_attacking = left_attacking or hitter.state_machine.current_id != StateMachine.StateId.ATTACKING
+		if dummy.health.current_health < hp and hitter.movement.velocity.length() > 10.0:
+			hits_on_the_move += 1
+		hp = dummy.health.current_health
+	_check(not left_attacking, "stays in the attacking state while it closes in after knockbacks")
+	_check(hits_on_the_move > 0, "lands hits while moving (%d)" % hits_on_the_move)
+
+func test_friendly_units_pass_each_other() -> void:
+	var a := _spawn("Melee", Vector2i(5, 10), Entity.Team.PLAYER, GoTo.new(Vector2i(11, 10)))
+	var b := _spawn("Melee", Vector2i(11, 10), Entity.Team.PLAYER, GoTo.new(Vector2i(5, 10)))
+	await _wait(8.0)
+	_check(a.current_grid_pos == Vector2i(11, 10) and b.current_grid_pos == Vector2i(5, 10), "two units walking into each other got past (at %s and %s)" % [a.current_grid_pos, b.current_grid_pos])
+
+func test_units_give_up_on_a_taken_tile() -> void:
+	# a crowd of brutes standing on and around the goal
+	for tile in [Vector2i(10, 10), Vector2i(10, 9), Vector2i(10, 11), Vector2i(11, 10)]:
+		_spawn("Brute", tile, Entity.Team.PLAYER, Behavior.new())
+	var unit := _spawn("Melee", Vector2i(7, 10), Entity.Team.PLAYER, GoTo.new(Vector2i(10, 10)))
+	await _wait(5.0)
+	_check(unit.state_machine.current_id == StateMachine.StateId.IDLE, "it stopped trying (%s at %s)" % [unit.state_machine.get_state_name(), unit.current_grid_pos])
+	_check(unit.movement.velocity.length() < 1.0, "and stands still instead of pushing forever (%.0f px/s)" % unit.movement.velocity.length())
 
 func test_ganging_up_doesnt_multiply_knockback() -> void:
 	var dummy := _spawn("Melee", Vector2i(9, 12), Entity.Team.ENEMY, Behavior.new())

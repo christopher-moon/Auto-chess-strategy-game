@@ -11,5 +11,6 @@ func decide(entity: Entity) -> int:
 	if combat.triggered_by == null:
 		return Id.IDLE
 
-	combat.target = combat.triggered_by if is_instance_valid(combat.triggered_by) else entity
+	# the blast is centred on the mine itself
+	combat.target = entity
 	return Id.ATTACKING

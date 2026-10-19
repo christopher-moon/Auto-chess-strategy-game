@@ -18,6 +18,14 @@ const CONTACT_GAP := 2.0
 const SLOW_RADIUS := 40.0
 # how hard units steer away from nearby units while walking (fraction of top speed)
 const SEPARATION_STRENGTH := 0.5
+# pixels past touching distance at which a unit starts stepping around a unit in front of it
+const AVOID_LOOKAHEAD := 40.0
+# how hard units step around units in front of them (fraction of top speed)
+const AVOID_STRENGTH := 1.0
+# AI ticks without getting closer to the goal before a unit gives up on it (someone is standing there)
+const STUCK_TICKS := 5
+# AI ticks a unit waits after giving up before it tries that goal again
+const RETRY_TICKS := 15
 
 var mass: float = 1.0
 var max_speed: float = 100.0
@@ -42,6 +50,11 @@ var _waypoint: Vector2i
 var _has_waypoint: bool = false
 # spreads units' periodic re-paths over different ticks, so a big wave doesn't path all on the same frame
 var _repath_phase: int = 0
+# giving up on a goal nobody can reach (e.g. another unit is standing on it)
+var _closest_to_goal: float = INF
+var _ticks_without_progress: int = 0
+var _gave_up_on: Vector2i
+var _retry_at_tick: int = -1
 static var _spawn_count: int = 0
 
 func _configure(data: EntityData) -> void:
@@ -63,12 +76,37 @@ func _configure(data: EntityData) -> void:
 # ask to walk to a tile. repaths when the goal changed, the path ran out, or every REPATH_TICKS
 func request_goal(tile: Vector2i) -> void:
 	chase_target = null
+	if tile == _gave_up_on and is_waiting():
+		return
+	if not has_goal or tile != goal_tile:
+		_closest_to_goal = INF
+		_ticks_without_progress = 0
 	var path_done := _path.is_empty() and not _has_waypoint and entity.current_grid_pos != tile
 	var needs_path := not has_goal or tile != goal_tile or is_repath_due() or path_done
 	goal_tile = tile
 	has_goal = true
 	if needs_path:
 		_repath()
+	_check_progress()
+
+# a unit that keeps pushing without getting any closer (its goal is taken, or a crowd won't let it through)
+# stops trying for a while instead of pushing forever
+func _check_progress() -> void:
+	if not is_moving():
+		return
+	var distance := entity.global_position.distance_to(entity.world.map.grid_to_world(goal_tile))
+	if distance < _closest_to_goal - 4.0:
+		_closest_to_goal = distance
+		_ticks_without_progress = 0
+		return
+	_ticks_without_progress += 1
+	if _ticks_without_progress >= STUCK_TICKS:
+		_gave_up_on = goal_tile
+		_retry_at_tick = entity.ticks_alive + RETRY_TICKS
+		_closest_to_goal = INF
+		_ticks_without_progress = 0
+		_path.clear()
+		_has_waypoint = false
 
 # run straight at `target` at full speed until we bump into it, then stay in contact
 func chase(target: Entity) -> void:
@@ -89,6 +127,10 @@ func stop() -> void:
 
 func is_moving() -> bool:
 	return _has_waypoint or not _path.is_empty()
+
+# true while the unit has given up on an unreachable goal and is waiting before trying again
+func is_waiting() -> bool:
+	return entity.ticks_alive < _retry_at_tick
 
 # the tile new paths should start from
 func get_path_origin() -> Vector2i:
@@ -156,9 +198,11 @@ func _steer() -> Vector2:
 		if distance <= ARRIVE_RADIUS:
 			_has_waypoint = false
 			return Vector2.ZERO
-		return offset / distance * minf(max_speed, max_speed * distance / SLOW_RADIUS)
+		var direction := offset / distance
+		return (direction + _avoidance(direction) * AVOID_STRENGTH).limit_length(1.0) * minf(max_speed, max_speed * distance / SLOW_RADIUS)
 
-	return (offset / distance + _separation() * SEPARATION_STRENGTH).limit_length(1.0) * max_speed
+	var direction := offset / distance
+	return (direction + _avoidance(direction) * AVOID_STRENGTH + _separation() * SEPARATION_STRENGTH).limit_length(1.0) * max_speed
 
 # take the next tile off the path, unless something is standing in the way
 func _next_waypoint() -> bool:
@@ -214,6 +258,26 @@ func _can_walk_straight(from: Vector2, tile: Vector2i, allowed: Dictionary) -> b
 			if map.get_tile_weight(cell) > 1.0 and not allowed.has(cell):
 				return false
 	return true
+
+# a sideways step around units right in front of us. a unit dead ahead is always passed on our right, so two
+# units walking into each other both turn their own right and slide past instead of locking up.
+# heavier units don't step around lighter ones; they shove through
+func _avoidance(direction: Vector2) -> Vector2:
+	var right := Vector2(-direction.y, direction.x)
+	var dodge := Vector2.ZERO
+	for other in entity.world.entities.get_entities_in_radius(entity.current_grid_pos, 1.5):
+		if other == entity or other.movement == null or other.movement.mass < mass:
+			continue
+		var offset := other.global_position - entity.global_position
+		var ahead := offset.dot(direction)
+		var side := offset.dot(right)
+		var reach := radius + other.movement.radius
+		if ahead <= 0.0 or ahead > reach + AVOID_LOOKAHEAD or absf(side) >= reach:
+			continue
+		# step away from the side it's on; if it's dead ahead, go right
+		var away := -1.0 if side > reach * 0.25 else 1.0
+		dodge += right * away * (1.0 - absf(side) / reach)
+	return dodge
 
 # a gentle push away from units we are about to overlap, so crowds spread out instead of jamming
 func _separation() -> Vector2:
