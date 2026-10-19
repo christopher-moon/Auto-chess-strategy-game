@@ -12,7 +12,7 @@ config_version=5
 
 config/name="First Script Project"
 run/main_scene="uid://b7m7mtp7nfr8o"
-config/features=PackedStringArray("4.6", "Mobile")
+config/features=PackedStringArray("4.7", "Mobile")
 
 [display]
 
