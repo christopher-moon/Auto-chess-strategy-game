@@ -8,7 +8,7 @@ var damage: float = 2.0
 var attack_range: float = 1.0
 var threat_range: float = 8.0
 var requires_line_of_sight: bool = true
-var knockback: int = 0
+var knockback_bonus: float = 0.0
 var stun_ticks: int = 0
 var aoe_radius: float = 1.5
 var projectile_name: String = ""
@@ -27,7 +27,7 @@ func _configure(data: EntityData) -> void:
 	attack_range = data.attack_range
 	threat_range = data.threat_range
 	requires_line_of_sight = data.requires_line_of_sight
-	knockback = data.knockback
+	knockback_bonus = data.knockback_bonus
 	stun_ticks = entity.world.seconds_to_ticks(data.stun_duration) if data.stun_duration > 0.0 else 0
 	aoe_radius = data.aoe_radius
 	projectile_name = data.projectile_name
@@ -68,12 +68,20 @@ func attack(other: Entity) -> void:
 	var world := entity.world
 	match attack_type:
 		EntityData.AttackType.MELEE:
-			world.combat.queue_hit(other, damage, knockback, stun_ticks, entity.current_grid_pos)
+			world.combat.queue_hit(other, damage, get_push(true), stun_ticks, entity.global_position)
 		EntityData.AttackType.PROJECTILE:
 			world.spawner.spawn_projectile(projectile_name, entity, other)
 		EntityData.AttackType.EXPLODE:
-			world.combat.queue_explosion(entity, entity.current_grid_pos, aoe_radius, damage, knockback, stun_ticks)
+			world.combat.queue_explosion(entity, aoe_radius, damage, get_push(false), stun_ticks)
 			world.combat.queue_kill(entity)
+
+# how hard this unit's hits shove: attack power, plus the bonus, plus (for body blows) the attacker's
+# own pushing force, mass × acceleration. the target's velocity changes by push / target mass
+func get_push(body_blow: bool) -> float:
+	var push := damage * entity.world.combat.push_per_damage + knockback_bonus
+	if body_blow and entity.movement:
+		push += entity.movement.mass * entity.movement.acceleration * entity.world.combat.push_per_force
+	return maxf(push, 0.0)
 
 # explode only: called by the EntityManager when something walks onto our tile
 func on_tile_entered(other: Entity) -> void:

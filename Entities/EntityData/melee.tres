@@ -11,5 +11,5 @@ has_health = true
 has_movement = true
 has_combat = true
 threat_range = 6.0
-knockback = 1
+knockback_bonus = 0.0
 metadata/_custom_type_script = "uid://dskc6o7hv3nnp"

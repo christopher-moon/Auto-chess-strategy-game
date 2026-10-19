@@ -21,7 +21,6 @@ var acceleration: float = 600.0
 var friction: float = 800.0
 var radius: float = 14.0
 var velocity: Vector2 = Vector2.ZERO
-var knockback_speed: float = 400.0
 
 # where the AI wants this unit to end up
 var goal_tile: Vector2i
@@ -36,8 +35,6 @@ var _path: Array[Vector2i] = [] # tiles still to visit, not counting the current
 var _waypoint: Vector2i
 var _has_waypoint: bool = false
 var _ticks_since_path: int = 0
-var _knock_target: Vector2
-var _knock_time_left: float = 0.0
 
 func _configure(data: EntityData) -> void:
 	mass = maxf(data.mass, 0.01)
@@ -70,17 +67,15 @@ func stop() -> void:
 	has_goal = false
 
 func is_moving() -> bool:
-	return _has_waypoint or not _path.is_empty() or _knock_time_left > 0.0
+	return _has_waypoint or not _path.is_empty()
 
 # the tile new paths should start from
 func get_path_origin() -> Vector2i:
 	return entity.current_grid_pos
 
-# slide to `tile` (already checked to be safe by the CombatManager), cancelling the path
-func knock_to(tile: Vector2i) -> void:
-	stop()
-	_knock_target = entity.world.map.grid_to_world(tile)
-	_knock_time_left = entity.global_position.distance_to(_knock_target) / knockback_speed + 0.1
+# instant change of momentum (knockback, explosions): heavier units are moved less
+func apply_impulse(impulse: Vector2) -> void:
+	velocity += impulse / mass
 
 func _repath() -> void:
 	_ticks_since_path = 0
@@ -96,15 +91,11 @@ func _physics_process(delta: float) -> void:
 	if entity == null or not entity.is_alive:
 		return
 
-	if _knock_time_left > 0.0:
-		_knock_time_left -= delta
-		var to_target := _knock_target - entity.global_position
-		velocity = Vector2.ZERO if to_target.length() <= ARRIVE_RADIUS else to_target.normalized() * knockback_speed
-	else:
-		var desired := _steer()
-		# push towards the desired velocity; with nothing to do, friction slows the unit down
-		var rate := acceleration if desired != Vector2.ZERO else friction
-		velocity = velocity.move_toward(desired, rate * delta)
+	var desired := _steer()
+	# push towards the desired velocity. with nothing to do, or while flying faster than it can run
+	# (after a knockback), friction slows the unit down instead
+	var rate := acceleration if desired != Vector2.ZERO and velocity.length() <= max_speed else friction
+	velocity = velocity.move_toward(desired, rate * delta)
 
 	_move(delta)
 
@@ -155,10 +146,38 @@ func _next_waypoint() -> bool:
 		return false
 
 	_path.remove_at(0)
+	# string-pulling: skip ahead to later waypoints we can walk to in a straight line, so units
+	# cut across open ground instead of zig-zagging tile by tile
+	var allowed := {next: true, entity.current_grid_pos: true}
+	while not _path.is_empty():
+		allowed[_path[0]] = true
+		if not _can_walk_straight(entity.global_position, _path[0], allowed):
+			break
+		next = _path[0]
+		_path.remove_at(0)
+
 	if next != entity.current_grid_pos:
-		facing = next - entity.current_grid_pos
+		facing = (next - entity.current_grid_pos).clampi(-1, 1)
 	_waypoint = next
 	_has_waypoint = true
+	return true
+
+# true when a body our size can walk from `from` to the centre of `tile` without touching a wall,
+# a blocker, or a pricey tile (mine etc.) the path didn't choose to cross. `allowed` are the path's own tiles
+func _can_walk_straight(from: Vector2, tile: Vector2i, allowed: Dictionary) -> bool:
+	var map := entity.world.map
+	var to := map.grid_to_world(tile)
+	var direction := (to - from).normalized()
+	var side := Vector2(-direction.y, direction.x) * radius
+	var steps := ceili(from.distance_to(to) / 8.0)
+	for i in range(1, steps + 1):
+		var point := from.lerp(to, float(i) / steps)
+		for offset in [Vector2.ZERO, side, -side]:
+			var cell := map.world_to_grid(point + offset)
+			if not map.is_walkable(cell) or entity.world.entities.get_blocker_at(cell, entity):
+				return false
+			if map.get_tile_weight(cell) > 1.0 and not allowed.has(cell):
+				return false
 	return true
 
 # a gentle push away from units we are about to overlap, so crowds spread out instead of jamming

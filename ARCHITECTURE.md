@@ -7,7 +7,7 @@ Logic runs on a fixed 0.2s tick (`TimeManager.tick_rate`). Movement, projectiles
 Each tick runs in this order:
 
 1. **Think and act.** `EntityManager.process_ai_tick()` calls `Entity.tick()` on every entity. Units pick a state and act, but attacks only *queue* hits.
-2. **Resolve.** `CombatManager.resolve()` applies every queued hit at once: first damage, then stun and knockback for survivors, then deaths. Two units that hit each other on the same tick both die (trading).
+2. **Resolve.** `CombatManager.resolve()` applies every queued hit at once: first damage, then stun and push for survivors, then deaths. Two units that hit each other on the same tick both die (trading).
 3. **React.** `TimeManager.on_global_tick` fires, and `LevelManager` updates the timer and capture progress.
 
 Projectile impacts happen during frames, but their hits are queued the same way and land on the next resolve.
@@ -39,6 +39,13 @@ Units (actors) are `CharacterBody2D` circles (`body_radius`) with their own velo
 - `move_and_slide()` handles collisions with walls, holes and the map edge (`MapManager` builds a static collider per solid tile), structures and other units
 - walking into another unit shoves it by `mass / (your mass + their mass)`, so heavy units plough through light ones
 - a light separation force spreads crowds out so they don't jam
+- paths are 8-way, but a diagonal step never clips the corner of a wall or a pricey tile (mine, box); waypoints are string-pulled, so units walk straight across open ground
+
+### Knockback
+
+A hit adds a push to the target's velocity: `velocity += direction × push / target mass`, and friction bleeds it off. Walls and other bodies stop it through normal collisions.
+
+`push = damage × push_per_damage + knockback_bonus`, and melee blows also add the attacker's own pushing force, `mass × acceleration × push_per_force`. `push_per_damage` and `push_per_force` are on the CombatManager node; `knockback_bonus` is per unit (negative for weaker shoves).
 
 Units no longer stop exactly on tile centres; the tile a unit is "on" is the tile under its centre. Try the Brute (key 7, mass 3) against Melee units to see weight at work.
 

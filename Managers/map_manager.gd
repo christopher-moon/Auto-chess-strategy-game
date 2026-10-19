@@ -13,6 +13,17 @@ const OBJECTIVE_SOURCE_ID := 2
 # global switch for line of sight checks (units can also opt out one by one in their data)
 @export var line_of_sight_enabled: bool = true
 
+# A* grid whose diagonal steps never clip the corner of a wall or a pricey tile (mine, box...):
+# units have a body, so cutting past one would brush it
+class TileAStar extends AStarGrid2D:
+	func _compute_cost(from_id: Vector2i, to_id: Vector2i) -> float:
+		var step := to_id - from_id
+		if step.x != 0 and step.y != 0:
+			for corner in [Vector2i(to_id.x, from_id.y), Vector2i(from_id.x, to_id.y)]:
+				if is_point_solid(corner) or get_point_weight_scale(corner) > 1.0:
+					return 1.0e6
+		return Vector2(step).length()
+
 #store astar grid for pathfinding
 var astar_grid: AStarGrid2D
 var tile_size: float = 64.0
@@ -33,7 +44,7 @@ func _ready() -> void:
 
 #set up pathfinding grid
 func setup_grid() -> void:
-	astar_grid = AStarGrid2D.new()
+	astar_grid = TileAStar.new()
 	tile_size = ground_layer.tile_set.tile_size.x
 
 	# 1. Define the grid boundaries based on your Ground layer
@@ -42,8 +53,10 @@ func setup_grid() -> void:
 	astar_grid.offset = astar_grid.cell_size / 2.0 # Centers points in the middle of tiles
 
 	# 2. Configure pathing behavior
-	astar_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER # Snappy 4-way movement
-	astar_grid.default_compute_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
+	# 8-way movement, but never cutting the corner of a wall
+	astar_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	astar_grid.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	astar_grid.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
 
 	# 3. Initialize the grid (must call this before using it)
 	astar_grid.update()
@@ -97,8 +110,11 @@ func get_tile_path(from: Vector2i, to: Vector2i, allow_partial: bool = false) ->
 func get_path_cost(path: Array[Vector2i]) -> float:
 	var cost := 0.0
 	for i in range(1, path.size()):
-		cost += astar_grid.get_point_weight_scale(path[i])
+		cost += Vector2(path[i] - path[i - 1]).length() * astar_grid.get_point_weight_scale(path[i])
 	return cost
+
+func get_tile_weight(grid_pos: Vector2i) -> float:
+	return astar_grid.get_point_weight_scale(grid_pos) if is_in_bounds(grid_pos) else INF
 
 func set_tile_weight(grid_pos: Vector2i, weight: float) -> void:
 	if astar_grid.is_in_boundsv(grid_pos):
