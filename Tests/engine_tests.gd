@@ -43,6 +43,10 @@ func _run() -> void:
 		"test_spawner_respects_max_count",
 		"test_attacker_captures_objective",
 		"test_defender_stays_leashed",
+		"test_units_accelerate_by_mass",
+		"test_units_take_up_space",
+		"test_heavy_units_shove_light_ones",
+		"test_walls_stop_physical_units",
 	]:
 		_current = test
 		await _load_game()
@@ -214,3 +218,35 @@ func test_defender_stays_leashed() -> void:
 	var near := _spawn("Melee", Vector2i(12, 12), Entity.Team.PLAYER, Behavior.new())
 	await _wait(3.0)
 	_check(near.health.current_health < near.health.max_health, "defender fought the unit inside its leash")
+
+func test_units_accelerate_by_mass() -> void:
+	var light := _spawn("Melee", Vector2i(6, 10), Entity.Team.PLAYER, GoTo.new(Vector2i(13, 10)))
+	var heavy := _spawn("Brute", Vector2i(6, 12), Entity.Team.PLAYER, GoTo.new(Vector2i(13, 12)))
+	await _wait(0.25)
+	_check(light.movement.velocity.length() < light.movement.max_speed, "no instant top speed (%.0f of %.0f)" % [light.movement.velocity.length(), light.movement.max_speed])
+	_check(heavy.movement.velocity.length() < light.movement.velocity.length(), "heavy unit picks up speed more slowly")
+	await _wait(1.5)
+	_check(heavy.movement.max_speed < light.movement.max_speed, "heavy unit has a lower top speed")
+	_check(light.global_position.x > heavy.global_position.x, "light unit is ahead")
+
+func test_units_take_up_space() -> void:
+	var a := _spawn("Melee", Vector2i(8, 10), Entity.Team.PLAYER, GoTo.new(Vector2i(11, 11)))
+	var b := _spawn("Melee", Vector2i(8, 12), Entity.Team.PLAYER, GoTo.new(Vector2i(11, 11)))
+	await _wait(4.0)
+	var gap := a.global_position.distance_to(b.global_position)
+	_check(gap >= a.movement.radius + b.movement.radius - 1.0, "units sent to the same tile don't overlap (%.1f px apart)" % gap)
+
+func test_heavy_units_shove_light_ones() -> void:
+	var light := _spawn("Melee", Vector2i(10, 12), Entity.Team.PLAYER, Behavior.new())
+	var start := light.global_position
+	var heavy := _spawn("Brute", Vector2i(8, 12), Entity.Team.PLAYER, GoTo.new(Vector2i(13, 12)))
+	await _wait(9.0)
+	_check(light.global_position.distance_to(start) > 8.0, "light unit was shoved %.1f px" % light.global_position.distance_to(start))
+	_check(heavy.current_grid_pos == Vector2i(13, 12), "heavy unit got through (at %s)" % heavy.current_grid_pos)
+
+func test_walls_stop_physical_units() -> void:
+	_wall(Vector2i(10, 12))
+	var unit := _spawn("Melee", Vector2i(9, 12), Entity.Team.PLAYER, Behavior.new())
+	unit.movement.velocity = Vector2(600, 0)
+	await _wait(0.5)
+	_check(unit.current_grid_pos == Vector2i(9, 12), "unit flung at a wall stays out of it (at %s)" % unit.current_grid_pos)

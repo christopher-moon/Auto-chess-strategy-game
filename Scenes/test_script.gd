@@ -9,6 +9,7 @@ const SPAWN_KEYS := {
 	KEY_4: "Turret",
 	KEY_5: "Spawner",
 	KEY_6: "Box",
+	KEY_7: "Brute",
 }
 # entities that always spawn as neutral, whatever team is selected
 const NEUTRAL_ENTITIES := ["Box"]
@@ -93,7 +94,7 @@ func _hud_text() -> String:
 		LevelManager.LevelState.LOST:
 			lines.append("DEFEAT: %s   (R to restart)" % level_manager.end_reason)
 	lines.append("Team: %s   Line of sight: %s%s" % [Entity.Team.keys()[selected_team].capitalize(), "on" if map_manager.line_of_sight_enabled else "off", "   PAUSED" if not time_manager.is_ticking and level_manager.state <= LevelManager.LevelState.RUNNING else ""])
-	lines.append("1 Melee  2 Ranged  3 Mine  4 Turret  5 Spawner  6 Box")
+	lines.append("1 Melee  2 Ranged  3 Mine  4 Turret  5 Spawner  6 Box  7 Brute")
 	lines.append("Tab team  W wall  O objective  X delete  S stun")
 	lines.append("L line of sight  H debug  Space pause  R restart")
 	return "\n".join(lines)

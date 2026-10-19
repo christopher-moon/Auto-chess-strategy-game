@@ -20,6 +20,10 @@ enum AttackType {MELEE, PROJECTILE, EXPLODE}
 @export var behavior: Behavior
 
 @export_group("Physical")
+# heavier units speed up more slowly, have a lower top speed, and win shoving matches
+@export var mass: float = 1.0
+# collision circle radius in pixels (a tile is 64)
+@export var body_radius: float = 14.0
 # A* cost multiplier for the tile this entity stands on (1 = normal ground)
 @export var pathing_weight: float = 1.0
 # units can't walk onto this entity's tile (boxes, turrets). paths may still go through it, at its pathing_weight
@@ -39,8 +43,12 @@ enum AttackType {MELEE, PROJECTILE, EXPLODE}
 @export var max_health: float = 10.0
 
 @export_group("Movement")
-# pixels per second
+# top speed in pixels per second at mass 1. actual top speed = move_speed / sqrt(mass)
 @export var move_speed: float = 100.0
+# pushing force in pixels/second² at mass 1. actual acceleration = move_force / mass
+@export var move_force: float = 600.0
+# how quickly the unit slows down when it isn't pushing, in pixels/second²
+@export var friction: float = 800.0
 
 @export_group("Combat")
 @export var attack_type: AttackType = AttackType.MELEE

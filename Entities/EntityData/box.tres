@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_data")
 entity_name = "Box"
+body_radius = 30.0
 shell_type = 1
 sprite_texture = ExtResource("2_tex")
 tint_by_team = false
