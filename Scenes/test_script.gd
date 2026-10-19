@@ -1,6 +1,7 @@
 # test_script.gd: initilize everything + some basic game controls for testing
 extends Node2D
 #yeow meow goose rax
+#yeow meow goose rax on mac
 @onready var spawner: EntitySpawner = $EntitySpawner
 @onready var entity_manager: EntityManager = $EntityManager
 @onready var map_manager: MapManager = $MapManager
