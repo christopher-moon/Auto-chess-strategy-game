@@ -1,7 +1,7 @@
 [gd_resource type="Resource" script_class="EntityData" format=3 uid="uid://cnc5iil4w8p67"]
 
 [ext_resource type="Script" uid="uid://dskc6o7hv3nnp" path="res://Entities/EntityData/entity_data.gd" id="1_data"]
-[ext_resource type="Texture2D" path="res://Art/mine.png" id="2_tex"]
+[ext_resource type="Texture2D" uid="uid://diic5isxyctbj" path="res://Art/mine.png" id="2_tex"]
 [ext_resource type="Resource" path="res://Behaviors/mine.tres" id="3_behavior"]
 
 [resource]
@@ -22,5 +22,4 @@ threat_range = 0.0
 requires_line_of_sight = false
 knockback = 1
 stun_duration = 1.0
-aoe_radius = 1.5
 metadata/_custom_type_script = "uid://dskc6o7hv3nnp"
