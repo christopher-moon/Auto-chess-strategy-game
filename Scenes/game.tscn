@@ -6,16 +6,26 @@
 [ext_resource type="Script" uid="uid://btnxpjhrtusql" path="res://Managers/map_manager.gd" id="2_wowpa"]
 [ext_resource type="Script" uid="uid://ral1dwkw4lor" path="res://Managers/entity_manager.gd" id="4_wowpa"]
 [ext_resource type="Script" uid="uid://bqvhlmrofu2jh" path="res://Managers/time_manager.gd" id="5_nnt18"]
+[ext_resource type="Script" uid="uid://co4ot05opklkc" path="res://Managers/level_manager.gd" id="6_fkdbe"]
 [ext_resource type="Script" uid="uid://c43ex3yekpqtf" path="res://Systems/entity_spawner.gd" id="6_i6g32"]
 [ext_resource type="Script" uid="uid://dskc6o7hv3nnp" path="res://Entities/EntityData/entity_data.gd" id="7_1l0tm"]
+[ext_resource type="Script" uid="uid://o434ab766ng0" path="res://Managers/combat_manager.gd" id="7_81klo"]
 [ext_resource type="PackedScene" uid="uid://gn8lfr30jqd8" path="res://Entities/obstacle.tscn" id="7_o5yvi"]
 [ext_resource type="PackedScene" uid="uid://hhlwo4cujd1y" path="res://Entities/trigger.tscn" id="8_rku1e"]
-[ext_resource type="Resource" uid="uid://cqd6o3t0nh13w" path="res://Entities/EntityData/warrior.tres" id="9_ldgsr"]
+[ext_resource type="Resource" uid="uid://cqd6o3t0nh13w" path="res://Entities/EntityData/melee.tres" id="9_ldgsr"]
 [ext_resource type="PackedScene" uid="uid://bfvqfd41kuupy" path="res://Components/health_component.tscn" id="9_rfjv2"]
 [ext_resource type="PackedScene" uid="uid://d1csxsl1nbier" path="res://Components/movement_component.tscn" id="10_1phco"]
 [ext_resource type="PackedScene" uid="uid://bt13454a0h33w" path="res://Components/combat_component.tscn" id="11_nb51f"]
-[ext_resource type="Resource" uid="uid://cb7li8m7kwin6" path="res://Entities/EntityData/barrier.tres" id="13_1phco"]
+[ext_resource type="Resource" uid="uid://cb7li8m7kwin6" path="res://Entities/EntityData/box.tres" id="13_1phco"]
 [ext_resource type="Resource" uid="uid://cnc5iil4w8p67" path="res://Entities/EntityData/mine.tres" id="15_nb51f"]
+[ext_resource type="PackedScene" path="res://Components/spawner_component.tscn" id="15_tgy6u"]
+[ext_resource type="PackedScene" path="res://Components/projectile_component.tscn" id="16_cwurv"]
+[ext_resource type="Resource" path="res://Entities/EntityData/ranged.tres" id="19_mucmn"]
+[ext_resource type="Resource" path="res://Entities/EntityData/arrow.tres" id="20_8m3t6"]
+[ext_resource type="Resource" path="res://Entities/EntityData/turret.tres" id="22_ese38"]
+[ext_resource type="Resource" path="res://Entities/EntityData/spawner.tres" id="23_oeip8"]
+[ext_resource type="Resource" path="res://Behaviors/attacker.tres" id="25_xe308"]
+[ext_resource type="Resource" path="res://Behaviors/defender.tres" id="26_d3cha"]
 
 [node name="Game" type="Node2D" unique_id=873304601]
 script = ExtResource("1_qxrlw")
@@ -31,12 +41,22 @@ tile_set = ExtResource("2_3dryh")
 tile_map_data = PackedByteArray("AAAEAAMAAQAAAAAAAAAFAAMAAQAAAAAAAAAGAAMAAQAAAAAAAAAHAAMAAQAAAAAAAAAHAAQAAQAAAAAAAAAHAAUAAQAAAAAAAAAHAAYAAQAAAAAAAAAHAAcAAQAAAAAAAAAIAAcAAQAAAAAAAAAJAAcAAQAAAAAAAAACAAYAAQAAAAAAAAADAAYAAQAAAAAAAAAEAAYAAQAAAAAAAAAEAAcAAQAAAAAAAAAEAAgAAQAAAAAAAAAEAAkAAQAAAAAAAAANAAcAAQAAAAAAAAAMAAcAAQAAAAAAAAAIAAMAAQAAAAAAAAAJAAMAAQAAAAAAAAAKAAMAAQAAAAAAAAALAAMAAQAAAAAAAAAMAAMAAQAAAAAAAAANAAMAAQAAAAAAAAAEAAwAAQAAAAAAAAAEAA0AAQAAAAAAAAAEAA4AAQAAAAAAAAAEAA8AAQAAAAAAAAAEABAAAQAAAAAAAAAEABEAAQAAAAAAAAADABEAAQAAAAAAAAACABEAAQAAAAAAAAA=")
 tile_set = ExtResource("2_3dryh")
 
+[node name="ObjectiveLayer" type="TileMapLayer" parent="MapManager" unique_id=1943140892]
+tile_map_data = PackedByteArray("AAAMAA4AAgAAAAAAAAANAA4AAgAAAAAAAAAMAA8AAgAAAAAAAAANAA8AAgAAAAAAAAA=")
+tile_set = ExtResource("2_3dryh")
+
 [node name="EntityManager" type="Node" parent="." unique_id=183575827]
 script = ExtResource("4_wowpa")
 
 [node name="TimeManager" type="Node" parent="." unique_id=477620180]
 process_mode = 3
 script = ExtResource("5_nnt18")
+
+[node name="LevelManager" type="Node" parent="." unique_id=1249905813]
+script = ExtResource("6_fkdbe")
+
+[node name="CombatManager" type="Node" parent="." unique_id=252320654]
+script = ExtResource("7_81klo")
 
 [node name="EntityContainer" type="Node2D" parent="." unique_id=1592244538]
 
@@ -48,4 +68,8 @@ trigger_template = ExtResource("8_rku1e")
 health_comp_scene = ExtResource("9_rfjv2")
 move_comp_scene = ExtResource("10_1phco")
 combat_comp_scene = ExtResource("11_nb51f")
-entity_library = Array[ExtResource("7_1l0tm")]([ExtResource("13_1phco"), ExtResource("9_ldgsr"), ExtResource("15_nb51f")])
+spawner_comp_scene = ExtResource("15_tgy6u")
+projectile_comp_scene = ExtResource("16_cwurv")
+entity_library = Array[ExtResource("7_1l0tm")]([ExtResource("9_ldgsr"), ExtResource("19_mucmn"), ExtResource("20_8m3t6"), ExtResource("15_nb51f"), ExtResource("22_ese38"), ExtResource("23_oeip8"), ExtResource("13_1phco")])
+player_unit_behavior = ExtResource("25_xe308")
+enemy_unit_behavior = ExtResource("26_d3cha")

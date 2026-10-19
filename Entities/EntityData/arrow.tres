@@ -1,0 +1,16 @@
+[gd_resource type="Resource" script_class="EntityData" format=3]
+
+[ext_resource type="Script" uid="uid://dskc6o7hv3nnp" path="res://Entities/EntityData/entity_data.gd" id="1_data"]
+[ext_resource type="Texture2D" path="res://Art/arrow.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_data")
+entity_name = "Arrow"
+shell_type = 2
+sprite_texture = ExtResource("2_tex")
+targetable = false
+has_projectile = true
+projectile_speed = 450.0
+projectile_max_distance = 8.0
+projectile_hit_radius = 20.0
+metadata/_custom_type_script = "uid://dskc6o7hv3nnp"

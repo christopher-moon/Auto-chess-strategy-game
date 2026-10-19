@@ -1,0 +1,66 @@
+# Engine architecture
+
+## The tick
+
+Logic runs on a fixed 0.2s tick (`TimeManager.tick_rate`). Movement, projectiles and (later) animation run every frame.
+
+Each tick runs in this order:
+
+1. **Think and act.** `EntityManager.process_ai_tick()` calls `Entity.tick()` on every entity. Units pick a state and act, but attacks only *queue* hits.
+2. **Resolve.** `CombatManager.resolve()` applies every queued hit at once: first damage, then stun and knockback for survivors, then deaths. Two units that hit each other on the same tick both die (trading).
+3. **React.** `TimeManager.on_global_tick` fires, and `LevelManager` updates the timer and capture progress.
+
+Projectile impacts happen during frames, but their hits are queued the same way and land on the next resolve.
+
+## Entities
+
+An entity is a shell scene (`Entities/actor.tscn`, `obstacle.tscn`, `trigger.tscn`) plus components, built by `EntitySpawner` from an `EntityData` resource (`Entities/EntityData/*.tres`). Each component reads its own stats from the data in `_configure()`.
+
+| Entity | Components | Notes |
+|---|---|---|
+| Melee | health, movement, combat | |
+| Ranged | health, movement, combat | fires `Arrow` |
+| Arrow | projectile | flies straight; hits the first hostile, or a box |
+| Mine | health, combat (explode) | path weight 50; explodes when a hostile unit enters its tile |
+| Turret | health, combat | blocks movement; stationary behavior |
+| Spawner | health, spawner | spawns its team's units on a timer, up to a max count |
+| Box | health | blocks movement and sight, not pathfinding (weight 20) |
+
+To add an entity, make a new `EntityData` .tres and add it to `EntitySpawner.entity_library` in `game.tscn`.
+
+`Systems/world.gd` holds references to the managers and is injected into every entity, so components never search the scene tree.
+
+## AI: behaviors and states
+
+A unit has exactly one active state (`States/`): **Idle**, **Moving**, **Attacking** or **Stunned**. Each tick, its **behavior** (`Behaviors/`) picks the state, and the `StateMachine` switches and runs it.
+
+- **Attacker**: fights any visible enemy in threat range. With nobody in sight, it walks to the cheapest objective tile.
+- **Defender**: walks to the objective. It only fights from tiles within `leash_range` walking tiles of an objective tile.
+- **Stationary** (turrets): shoots the nearest visible enemy in range.
+- **Mine**: explodes once triggered.
+
+Behaviors are shared resources, so they keep no per-unit data. The target lives on `CombatComponent.target`, and the goal tile lives on `MovementComponent.goal_tile`. A target is held until it dies or is obscured, or until a stun clears it. Units walk to the first tile on the cheapest path that is in range of the target, not to the target's own tile. If a box or a structure blocks the path, they break through it.
+
+For a new behavior (patrol, for example), extend `Behavior` and override `decide()`.
+
+Fighting units without a behavior in their data get the spawner's team default: Player units are attackers and Enemy units are defenders.
+
+## Map
+
+`MapManager` owns three `TileMapLayer`s: Ground, Obstacle (walls) and Objective. Walls, holes and off-map tiles are solid for A*. Entities add weight to their tile (`pathing_weight`), so paths avoid mines and boxes unless there is no other way. Line of sight checks walls and entities with `blocks_line_of_sight`. It can be switched off globally (`line_of_sight_enabled`) or per unit (`requires_line_of_sight`).
+
+## Debug controls (game.tscn)
+
+`1` Melee, `2` Ranged, `3` Mine, `4` Turret, `5` Spawner, `6` Box (all at the mouse tile)
+`Tab` switch team · `W` toggle wall · `O` toggle objective tile · `X` delete · `S` stun
+`L` line of sight · `H` debug labels and lines · `Space` pause · `R` restart
+
+The level timer starts when the first Player unit is placed. The level is won by holding the zone uncontested for 5s. It is lost when time runs out or every Player unit dies.
+
+## Tests
+
+```
+godot --headless --fixed-fps 60 --script res://Tests/engine_tests.gd
+```
+
+The tests cover trading, range positioning, line of sight, mines, boxes, knockback, stun, spawner caps, capture and the defender leash.

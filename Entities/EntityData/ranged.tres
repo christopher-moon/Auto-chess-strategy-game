@@ -1,0 +1,22 @@
+[gd_resource type="Resource" script_class="EntityData" format=3]
+
+[ext_resource type="Script" uid="uid://dskc6o7hv3nnp" path="res://Entities/EntityData/entity_data.gd" id="1_data"]
+[ext_resource type="Texture2D" path="res://Art/ranged.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_data")
+entity_name = "Ranged"
+shell_type = 0
+sprite_texture = ExtResource("2_tex")
+has_health = true
+has_movement = true
+has_combat = true
+max_health = 6.0
+move_speed = 90.0
+attack_type = 1
+damage = 2.0
+attack_speed = 0.8
+attack_range = 4.0
+threat_range = 6.0
+projectile_name = "Arrow"
+metadata/_custom_type_script = "uid://dskc6o7hv3nnp"

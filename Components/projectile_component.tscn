@@ -1,0 +1,6 @@
+[gd_scene format=3]
+
+[ext_resource type="Script" path="res://Components/ComponentScripts/projectile_component.gd" id="1"]
+
+[node name="ProjectileComponent" type="Node"]
+script = ExtResource("1")

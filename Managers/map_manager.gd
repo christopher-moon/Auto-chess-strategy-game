@@ -1,64 +1,176 @@
-#map manager: in charge of setting up levels and handling pathfinding
+#map manager: in charge of setting up levels, objective tiles, line of sight and pathfinding
 class_name MapManager
 extends Node2D
 
+const UNREACHABLE := 1 << 30
+const WALL_SOURCE_ID := 1
+const OBJECTIVE_SOURCE_ID := 2
+
 @onready var ground_layer: TileMapLayer = $GroundLayer
 @onready var obstacle_layer: TileMapLayer = $ObstacleLayer
+@onready var objective_layer: TileMapLayer = $ObjectiveLayer
+
+# global switch for line of sight checks (units can also opt out one by one in their data)
+@export var line_of_sight_enabled: bool = true
 
 #store astar grid for pathfinding
 var astar_grid: AStarGrid2D
+var tile_size: float = 64.0
+
+var objective_tiles: Array[Vector2i] = []
+var _objective_lookup: Dictionary = {}
+# walking distance (in tiles) from every reachable tile to the nearest objective tile
+var _objective_distance: Dictionary = {}
 
 #on load, set up grid
 func _ready() -> void:
 	setup_grid()
+	refresh_objectives()
 
 #set up pathfinding grid
-func setup_grid():
+func setup_grid() -> void:
 	astar_grid = AStarGrid2D.new()
-	
+	tile_size = ground_layer.tile_set.tile_size.x
+
 	# 1. Define the grid boundaries based on your Ground layer
-	var map_rect = ground_layer.get_used_rect()
-	astar_grid.region = map_rect
-	astar_grid.cell_size = Vector2(64, 64)
-	astar_grid.offset = Vector2(32, 32) # Centers points in the middle of tiles
-	
+	astar_grid.region = ground_layer.get_used_rect()
+	astar_grid.cell_size = Vector2(ground_layer.tile_set.tile_size)
+	astar_grid.offset = astar_grid.cell_size / 2.0 # Centers points in the middle of tiles
+
 	# 2. Configure pathing behavior
 	astar_grid.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_NEVER # Snappy 4-way movement
 	astar_grid.default_compute_heuristic = AStarGrid2D.HEURISTIC_MANHATTAN
-	
+
 	# 3. Initialize the grid (must call this before using it)
 	astar_grid.update()
-	
-	# 4. Fill the grid with 'Solid' walls and 'Weighted' obstacles
-	sync_obstacles_to_grid()
 
-func sync_obstacles_to_grid():
-	# Loop through every tile you drew in the ObstacleLayer
+	# 4. Holes in the ground and every wall tile are solid
+	for x in range(astar_grid.region.position.x, astar_grid.region.end.x):
+		for y in range(astar_grid.region.position.y, astar_grid.region.end.y):
+			var cell := Vector2i(x, y)
+			if ground_layer.get_cell_source_id(cell) == -1:
+				astar_grid.set_point_solid(cell, true)
 	for cell in obstacle_layer.get_used_cells():
-		# In Godot, you can use 'Custom Data' on tiles to differentiate 
-		# between a hard wall (solid) and a mine (weighted).
-		# For now, let's treat everything on the obstacle layer as a solid wall.
-		astar_grid.set_point_solid(cell, true)
+		if astar_grid.is_in_boundsv(cell):
+			astar_grid.set_point_solid(cell, true)
 
 # --- PUBLIC HELPER FUNCTIONS ---
 func world_to_grid(world_pos: Vector2) -> Vector2i:
-	return ground_layer.local_to_map(world_pos)
-	
-func grid_to_world(grid_pos: Vector2i) -> Vector2:
-	return ground_layer.map_to_local(grid_pos)
+	return ground_layer.local_to_map(ground_layer.to_local(world_pos))
 
-func get_world_path(start_pos: Vector2, end_pos: Vector2) -> PackedVector2Array:
-	# Convert world pixels to grid coordinates (e.g., 128, 128 -> 2, 2)
-	var start_grid = world_to_grid(start_pos)
-	var end_grid = world_to_grid(end_pos)
-	
-	# Check if points are valid
-	if not astar_grid.is_in_boundsv(start_grid) or not astar_grid.is_in_boundsv(end_grid):
+func grid_to_world(grid_pos: Vector2i) -> Vector2:
+	return ground_layer.to_global(ground_layer.map_to_local(grid_pos))
+
+func is_in_bounds(grid_pos: Vector2i) -> bool:
+	return astar_grid.is_in_boundsv(grid_pos)
+
+# walls, holes and anything off the map
+func is_solid(grid_pos: Vector2i) -> bool:
+	return not astar_grid.is_in_boundsv(grid_pos) or astar_grid.is_point_solid(grid_pos)
+
+func is_walkable(grid_pos: Vector2i) -> bool:
+	return not is_solid(grid_pos)
+
+# cheapest tile path (weights included). the first tile is `from`.
+# allow_partial returns the path to the closest reachable tile when `to` can't be reached
+func get_tile_path(from: Vector2i, to: Vector2i, allow_partial: bool = false) -> Array[Vector2i]:
+	if not is_in_bounds(from) or not is_in_bounds(to):
 		return []
-		
-	# Get the path as world positions
-	return astar_grid.get_point_path(start_grid, end_grid)
-	
+	return astar_grid.get_id_path(from, to, allow_partial)
+
+# total cost of walking a path, matching how A* scores it
+func get_path_cost(path: Array[Vector2i]) -> float:
+	var cost := 0.0
+	for i in range(1, path.size()):
+		cost += astar_grid.get_point_weight_scale(path[i])
+	return cost
+
 func set_tile_weight(grid_pos: Vector2i, weight: float) -> void:
 	if astar_grid.is_in_boundsv(grid_pos):
 		astar_grid.set_point_weight_scale(grid_pos, weight)
+
+# tiles a sight line from `from` to `to` passes over, not counting the two end tiles
+func get_line_tiles(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
+	var tiles: Array[Vector2i] = []
+	var start := Vector2(from)
+	var end := Vector2(to)
+	var samples := ceili(start.distance_to(end) * 4.0)
+	for i in range(1, samples):
+		var tile := Vector2i(start.lerp(end, float(i) / samples).round())
+		if tile != from and tile != to and (tiles.is_empty() or tiles[-1] != tile):
+			tiles.append(tile)
+	return tiles
+
+# --- OBJECTIVES ---
+
+func is_objective(grid_pos: Vector2i) -> bool:
+	return _objective_lookup.has(grid_pos)
+
+# walking distance to the nearest objective tile, or UNREACHABLE
+func distance_to_objective(grid_pos: Vector2i) -> int:
+	return _objective_distance.get(grid_pos, UNREACHABLE)
+
+# the objective tile that is cheapest to walk to (checks the few closest by straight distance)
+func find_nearest_objective_tile(from: Vector2i) -> Variant:
+	var candidates := objective_tiles.duplicate()
+	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return _manhattan(a, from) < _manhattan(b, from))
+
+	var best: Variant = null
+	var best_cost := INF
+	for tile in candidates.slice(0, 6):
+		if tile == from:
+			return tile
+		var path := get_tile_path(from, tile)
+		if path.is_empty():
+			continue
+		var cost := get_path_cost(path)
+		if cost < best_cost:
+			best_cost = cost
+			best = tile
+	return best
+
+# rebuild the objective lookup and distance field. call after painting objective tiles or walls
+func refresh_objectives() -> void:
+	objective_tiles.clear()
+	_objective_lookup.clear()
+	for cell in objective_layer.get_used_cells():
+		if is_walkable(cell):
+			objective_tiles.append(cell)
+			_objective_lookup[cell] = true
+
+	# breadth first search outwards from every objective tile over walkable ground
+	_objective_distance.clear()
+	var frontier: Array[Vector2i] = objective_tiles.duplicate()
+	for tile in frontier:
+		_objective_distance[tile] = 0
+	while not frontier.is_empty():
+		var tile: Vector2i = frontier.pop_front()
+		for offset in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
+			var next: Vector2i = tile + offset
+			if is_walkable(next) and not _objective_distance.has(next):
+				_objective_distance[next] = _objective_distance[tile] + 1
+				frontier.append(next)
+
+# --- RUNTIME EDITING (debug tools, and later level scripting) ---
+
+func set_wall(grid_pos: Vector2i, solid: bool) -> void:
+	if not is_in_bounds(grid_pos):
+		return
+	if solid:
+		obstacle_layer.set_cell(grid_pos, WALL_SOURCE_ID, Vector2i.ZERO)
+	else:
+		obstacle_layer.erase_cell(grid_pos)
+	astar_grid.set_point_solid(grid_pos, solid or ground_layer.get_cell_source_id(grid_pos) == -1)
+	refresh_objectives()
+
+func set_objective(grid_pos: Vector2i, enabled: bool) -> void:
+	if not is_walkable(grid_pos):
+		return
+	if enabled:
+		objective_layer.set_cell(grid_pos, OBJECTIVE_SOURCE_ID, Vector2i.ZERO)
+	else:
+		objective_layer.erase_cell(grid_pos)
+	refresh_objectives()
+
+func _manhattan(a: Vector2i, b: Vector2i) -> int:
+	return absi(a.x - b.x) + absi(a.y - b.y)

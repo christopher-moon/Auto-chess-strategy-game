@@ -1,15 +1,14 @@
-# state: base class for states 
-class_name state
-extends Node
+# state: base class for unit states. a unit is only ever in one state at a time; the StateMachine
+# owns one instance of each state per unit and switches between them
+class_name State
+extends RefCounted
 
-# store owner and state machine
+# store owner entity
 var entity: Entity
-#var state_machine: StateMachine
 
 # called once by the StateMachine when the entity is spawned
 func setup(parent_entity: Entity) -> void:
 	entity = parent_entity
-	#state_machine = machine
 
 # called when the state machine switches TO this state
 func enter() -> void:
@@ -19,6 +18,6 @@ func enter() -> void:
 func exit() -> void:
 	pass
 
-# fired by the EntityManager's 0.2s tick (Phase 1: Intent)
+# fired every AI tick while this is the current state
 func on_tick() -> void:
 	pass

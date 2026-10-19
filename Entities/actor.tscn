@@ -3,6 +3,8 @@
 [ext_resource type="Script" uid="uid://cdts3k2e06r5n" path="res://Entities/EntityScripts/base_entity.gd" id="1_nj1ty"]
 [ext_resource type="Texture2D" uid="uid://cx5uyuaei4od5" path="res://character.png" id="1_xln2q"]
 
+[ext_resource type="Script" path="res://States/state_machine.gd" id="3_state"]
+
 [sub_resource type="CircleShape2D" id="CircleShape2D_642gq"]
 
 [node name="Actor" type="CharacterBody2D" unique_id=771520132]
@@ -22,3 +24,4 @@ shape = SubResource("CircleShape2D_642gq")
 [node name="Components" type="Node" parent="." unique_id=102585684]
 
 [node name="StateMachine" type="Node" parent="." unique_id=822958065]
+script = ExtResource("3_state")

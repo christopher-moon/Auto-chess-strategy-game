@@ -13,11 +13,20 @@ extends Node
 @export var health_comp_scene: PackedScene
 @export var move_comp_scene: PackedScene
 @export var combat_comp_scene: PackedScene
+@export var spawner_comp_scene: PackedScene
+@export var projectile_comp_scene: PackedScene
 
 # entity database
 @export_category("Entity Database")
 # entity resource files go here
 @export var entity_library: Array[EntityData]
+
+# behaviors given to fighting units whose data doesn't name one
+@export_category("Default Behaviors")
+@export var player_unit_behavior: Behavior
+@export var enemy_unit_behavior: Behavior
+
+var world: World
 
 var _db: Dictionary = {}
 var _id_counter: int = 100
@@ -26,70 +35,94 @@ var _id_counter: int = 100
 @onready var entity_container: Node2D = $"../EntityContainer"
 @onready var entity_manager: EntityManager = $"../EntityManager"
 @onready var map_manager: MapManager = $"../MapManager"
+@onready var combat_manager: CombatManager = $"../CombatManager"
+@onready var time_manager: TimeManager = $"../TimeManager"
 
 func _ready() -> void:
+	world = World.new(map_manager, entity_manager, combat_manager, self, time_manager)
 	# Build the dictionary for fast lookups
 	for data in entity_library:
 		if data: # Safety check in case of empty array slots
 			_db[data.entity_name] = data
 
-func spawn_entity(entity_name: String, pos: Vector2, team: String) -> Node2D:
+func has_entity(entity_name: String) -> bool:
+	return _db.has(entity_name)
+
+func spawn_entity(entity_name: String, pos: Vector2, team: Entity.Team, behavior_override: Behavior = null) -> Entity:
 	var data: EntityData = _db.get(entity_name)
-	if not data: 
+	if not data:
 		push_error("EntitySpawner: '%s' not found in library!" % entity_name)
 		return null
 
 	# 1. Instantiate the correct Shell based on the Enum
-	var entity: Node2D
+	var entity: Entity
 	match data.shell_type:
-		EntityData.EntityShell.ACTOR: 
+		EntityData.EntityShell.ACTOR:
 			entity = actor_template.instantiate()
-		EntityData.EntityShell.OBSTACLE: 
+		EntityData.EntityShell.OBSTACLE:
 			entity = obstacle_template.instantiate()
-		EntityData.EntityShell.TRIGGER: 
+		EntityData.EntityShell.TRIGGER:
 			entity = trigger_template.instantiate()
-	
-	entity.global_position = pos
 
-	# 2. Assign Visuals
-	var sprite = entity.get_node_or_null("Sprite2D")
-	if sprite and data.sprite_texture: 
-		sprite.texture = data.sprite_texture
-
-	# 3. Add Components Additively
-	var comps_folder = entity.get_node("Components")
-	
-	if data.has_health:
-		var h = health_comp_scene.instantiate()
-		comps_folder.add_child(h)
-		h.setup(entity)
-		h.initialize(data.max_health)
-
-	if data.has_movement:
-		var m = move_comp_scene.instantiate()
-		comps_folder.add_child(m)
-		m.setup(entity)
-		m.speed = data.move_speed
-		
-	if data.has_combat:
-		var c = combat_comp_scene.instantiate()
-		comps_folder.add_child(c)
-		c.setup(entity)
-		c.initialize(data.damage, data.attack_speed, data.attack_range, data.threat_range)
-
-	# 4. Finalize Identity (Already in the template)
+	# 2. Identity (components read world/team while configuring)
+	entity.world = world
+	entity.data = data
 	entity.entity_name = data.entity_name
 	entity.team = team
 	entity.shell_type = data.shell_type
 	entity.entity_id = _id_counter
 	_id_counter += 1
 	entity.pathing_weight = data.pathing_weight
-	
-	# 5. Add to scene tree and register with Entity Manager
+	entity.blocks_movement = data.blocks_movement
+	entity.blocks_line_of_sight = data.blocks_line_of_sight
+	entity.targetable = data.targetable
+	entity.position = pos
+	entity.current_grid_pos = map_manager.world_to_grid(pos)
+
+	# 3. Assign Visuals
+	var sprite := entity.get_node_or_null("Sprite2D") as Sprite2D
+	if sprite and data.sprite_texture:
+		sprite.texture = data.sprite_texture
+
+	# 4. Add Components Additively
+	var comps_folder := entity.get_node("Components")
+	if data.has_health:
+		entity.health = _add_component(health_comp_scene, comps_folder, entity, data)
+	if data.has_movement:
+		entity.movement = _add_component(move_comp_scene, comps_folder, entity, data)
+	if data.has_combat:
+		entity.combat = _add_component(combat_comp_scene, comps_folder, entity, data)
+	if data.has_spawner:
+		entity.unit_spawner = _add_component(spawner_comp_scene, comps_folder, entity, data)
+	if data.has_projectile:
+		entity.projectile = _add_component(projectile_comp_scene, comps_folder, entity, data)
+
+	# 5. AI: explicit behavior > data behavior > team default (for units that move and fight)
+	entity.behavior = behavior_override if behavior_override else data.behavior
+	if entity.behavior == null and data.has_movement and data.has_combat:
+		entity.behavior = player_unit_behavior if team == Entity.Team.PLAYER else enemy_unit_behavior
+	if entity.behavior and entity.combat:
+		entity.state_machine = entity.get_node("StateMachine")
+		entity.state_machine.setup(entity)
+
+	# 6. Add to scene tree and register with Entity Manager
 	entity_container.add_child(entity)
-	var grid_pos = map_manager.world_to_grid(pos)
-	entity.current_grid_pos = Vector2(grid_pos)
-	
 	entity_manager.register_entity(entity)
 
 	return entity
+
+# fire `projectile_name` from `shooter` towards where `target` is standing now
+func spawn_projectile(projectile_name: String, shooter: Entity, target: Entity) -> Entity:
+	var projectile := spawn_entity(projectile_name, shooter.global_position, shooter.team)
+	if projectile == null or projectile.projectile == null:
+		push_error("EntitySpawner: '%s' is not a projectile" % projectile_name)
+		return projectile
+	var combat := shooter.combat
+	projectile.projectile.launch(target.global_position - shooter.global_position, combat.damage, combat.knockback, combat.stun_ticks)
+	return projectile
+
+func _add_component(scene: PackedScene, folder: Node, entity: Entity, data: EntityData) -> Component:
+	var component: Component = scene.instantiate()
+	folder.add_child(component)
+	component.setup(entity, data)
+	return component

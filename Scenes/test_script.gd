@@ -1,51 +1,99 @@
 # test_script.gd: initilize everything + some basic game controls for testing
 extends Node2D
-#yeow meow goose rax
-#yeow meow goose rax on mac
+
+# number keys spawn these at the mouse tile
+const SPAWN_KEYS := {
+	KEY_1: "Melee",
+	KEY_2: "Ranged",
+	KEY_3: "Mine",
+	KEY_4: "Turret",
+	KEY_5: "Spawner",
+	KEY_6: "Box",
+}
+# entities that always spawn as neutral, whatever team is selected
+const NEUTRAL_ENTITIES := ["Box"]
+const TEST_STUN_SECONDS := 2.0
+
 @onready var spawner: EntitySpawner = $EntitySpawner
 @onready var entity_manager: EntityManager = $EntityManager
 @onready var map_manager: MapManager = $MapManager
+@onready var time_manager: TimeManager = $TimeManager
+@onready var level_manager: LevelManager = $LevelManager
 
-func _ready():	
-	# Delete the hardcoded test unit from the scene tree if you still have it,
-	# we want to spawn them dynamically now!
-	if has_node("EntityContainer/BaseUnit"):
-		$EntityContainer/BaseUnit.queue_free()
+var selected_team: Entity.Team = Entity.Team.PLAYER
+var _hud: Label
+var _overlay: DebugOverlay
+
+func _ready() -> void:
+	_overlay = DebugOverlay.new()
+	_overlay.entity_manager = entity_manager
+	add_child(_overlay)
+
+	var canvas := CanvasLayer.new()
+	add_child(canvas)
+	_hud = Label.new()
+	_hud.position = Vector2(40, 1180)
+	_hud.add_theme_font_size_override("font_size", 28)
+	canvas.add_child(_hud)
+
+func _process(_delta: float) -> void:
+	_hud.text = _hud_text()
 
 # basic game controls
-func _input(event):
-	# 1: Spawn a friendly warrior
-	if event is InputEventKey and event.keycode == KEY_1 and event.pressed:
-		var spawn_pos = get_global_mouse_position()
-		# 1. Convert pixels to grid index (e.g., 140, 150 -> 2, 2)
-		spawn_pos = map_manager.world_to_grid(spawn_pos)
-		# 2. Convert grid index back to the CENTER of that tile in pixels
-		spawn_pos = map_manager.grid_to_world(spawn_pos)
-		spawner.spawn_entity("Warrior", spawn_pos, "friendly")
-		
-	# 2: Spawn an enemy warrior
-	if event is InputEventKey and event.keycode == KEY_2 and event.pressed:
-		var spawn_pos = get_global_mouse_position()
-		spawn_pos = map_manager.world_to_grid(spawn_pos)
-		spawn_pos = map_manager.grid_to_world(spawn_pos)
-		spawner.spawn_entity("Warrior", spawn_pos, "enemy")
-		
-	# 3: Spawn a mine
-	if event is InputEventKey and event.keycode == KEY_3 and event.pressed:
-		var spawn_pos = get_global_mouse_position()
-		spawn_pos = map_manager.world_to_grid(spawn_pos)
-		spawn_pos = map_manager.grid_to_world(spawn_pos)
-		spawner.spawn_entity("Mine", spawn_pos, "enemy")
-		
-	# LEFT CLICK: Command all moving units
-	elif event is InputEventMouseButton and event.button_index == MOUSE_BUTTON_LEFT and event.pressed:
-		print("command move")
-		var target_pos = get_global_mouse_position()
-		
-		# System-level command: Loop through the EntityManager's tracked list
-		for unit in entity_manager.actors:
-			# Find the movement component dynamically
-			var move_comp = unit.get_node_or_null("Components/MovementComponent")
-			if move_comp:
-				print("found mover")
-				move_comp.path = map_manager.get_world_path(unit.global_position, target_pos)
+func _unhandled_input(event: InputEvent) -> void:
+	if not (event is InputEventKey and event.pressed and not event.echo):
+		return
+	var tile := map_manager.world_to_grid(get_global_mouse_position())
+
+	if SPAWN_KEYS.has(event.keycode):
+		_spawn_at(SPAWN_KEYS[event.keycode], tile)
+		return
+
+	match event.keycode:
+		KEY_TAB, KEY_T:
+			selected_team = Entity.Team.ENEMY if selected_team == Entity.Team.PLAYER else Entity.Team.PLAYER
+		KEY_W:
+			map_manager.set_wall(tile, map_manager.is_walkable(tile))
+		KEY_O:
+			map_manager.set_objective(tile, not map_manager.is_objective(tile))
+		KEY_X:
+			for e in entity_manager.get_entities_at_grid(tile).duplicate():
+				entity_manager.remove_entity(e)
+		KEY_S:
+			for e in entity_manager.get_entities_at_grid(tile):
+				e.apply_stun(spawner.world.seconds_to_ticks(TEST_STUN_SECONDS))
+		KEY_L:
+			map_manager.line_of_sight_enabled = not map_manager.line_of_sight_enabled
+		KEY_H:
+			Entity.show_debug_labels = not Entity.show_debug_labels
+			_overlay.visible = Entity.show_debug_labels
+			for e in entity_manager.actors + entity_manager.obstacles + entity_manager.triggers:
+				e.refresh_debug_label()
+		KEY_SPACE:
+			if level_manager.state == LevelManager.LevelState.WAITING or level_manager.state == LevelManager.LevelState.RUNNING:
+				time_manager.is_ticking = not time_manager.is_ticking
+		KEY_R:
+			get_tree().reload_current_scene()
+
+func _spawn_at(entity_name: String, tile: Vector2i) -> void:
+	if not map_manager.is_walkable(tile) or entity_manager.get_blocker_at(tile):
+		return
+	var team := Entity.Team.NEUTRAL if entity_name in NEUTRAL_ENTITIES else selected_team
+	spawner.spawn_entity(entity_name, map_manager.grid_to_world(tile), team)
+
+func _hud_text() -> String:
+	var lines: Array[String] = []
+	match level_manager.state:
+		LevelManager.LevelState.WAITING:
+			lines.append("Place a Player unit to start the timer")
+		LevelManager.LevelState.RUNNING:
+			lines.append("Time %.1fs   Capture %.1f / %.1fs%s" % [level_manager.time_remaining, level_manager.capture_progress, level_manager.capture_time, "   CONTESTED" if level_manager.is_contested else ""])
+		LevelManager.LevelState.WON:
+			lines.append("VICTORY: %s   (R to restart)" % level_manager.end_reason)
+		LevelManager.LevelState.LOST:
+			lines.append("DEFEAT: %s   (R to restart)" % level_manager.end_reason)
+	lines.append("Team: %s   Line of sight: %s%s" % [Entity.Team.keys()[selected_team].capitalize(), "on" if map_manager.line_of_sight_enabled else "off", "   PAUSED" if not time_manager.is_ticking and level_manager.state <= LevelManager.LevelState.RUNNING else ""])
+	lines.append("1 Melee  2 Ranged  3 Mine  4 Turret  5 Spawner  6 Box")
+	lines.append("Tab team  W wall  O objective  X delete  S stun")
+	lines.append("L line of sight  H debug  Space pause  R restart")
+	return "\n".join(lines)
