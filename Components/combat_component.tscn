@@ -1,0 +1,6 @@
+[gd_scene format=3 uid="uid://bt13454a0h33w"]
+
+[ext_resource type="Script" uid="uid://occrpm4i3ps6" path="res://Components/ComponentScripts/combat_component.gd" id="1_vtisb"]
+
+[node name="CombatComponent" type="Node" unique_id=1302715941]
+script = ExtResource("1_vtisb")

@@ -1,0 +1,24 @@
+[gd_scene format=3 uid="uid://bnji1u3ad6f5j"]
+
+[ext_resource type="Script" uid="uid://cdts3k2e06r5n" path="res://Entities/EntityScripts/base_entity.gd" id="1_nj1ty"]
+[ext_resource type="Texture2D" uid="uid://cx5uyuaei4od5" path="res://character.png" id="1_xln2q"]
+
+[sub_resource type="CircleShape2D" id="CircleShape2D_642gq"]
+
+[node name="Actor" type="CharacterBody2D" unique_id=771520132]
+script = ExtResource("1_nj1ty")
+
+[node name="DebugLabel" type="Label" parent="." unique_id=777576934]
+offset_right = 40.0
+offset_bottom = 23.0
+theme_override_colors/font_color = Color(0, 0, 0, 1)
+
+[node name="Sprite2D" type="Sprite2D" parent="." unique_id=1351824644]
+texture = ExtResource("1_xln2q")
+
+[node name="CollisionShape2D" type="CollisionShape2D" parent="." unique_id=449843132]
+shape = SubResource("CircleShape2D_642gq")
+
+[node name="Components" type="Node" parent="." unique_id=102585684]
+
+[node name="StateMachine" type="Node" parent="." unique_id=822958065]
