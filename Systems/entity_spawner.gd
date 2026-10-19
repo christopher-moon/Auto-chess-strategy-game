@@ -123,7 +123,7 @@ func spawn_projectile(projectile_name: String, shooter: Entity, target: Entity) 
 		push_error("EntitySpawner: '%s' is not a projectile" % projectile_name)
 		return projectile
 	var combat := shooter.combat
-	projectile.projectile.launch(target.global_position - shooter.global_position, combat.damage, combat.knockback, combat.stun_ticks)
+	projectile.projectile.launch(target.global_position - shooter.global_position, combat.damage, combat.get_push(false), combat.stun_ticks)
 	return projectile
 
 func _add_component(scene: PackedScene, folder: Node, entity: Entity, data: EntityData) -> Component:

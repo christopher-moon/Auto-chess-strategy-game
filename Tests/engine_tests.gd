@@ -38,7 +38,8 @@ func _run() -> void:
 		"test_mine_explodes_when_walked_over",
 		"test_units_path_around_boxes",
 		"test_units_break_box_when_no_other_way",
-		"test_knockback_stops_before_walls",
+		"test_knockback_never_enters_walls",
+		"test_push_scales_with_mass_and_bonus",
 		"test_stun_stops_attacks_and_clears_target",
 		"test_spawner_respects_max_count",
 		"test_attacker_captures_objective",
@@ -151,7 +152,7 @@ func test_mine_explodes_when_walked_over() -> void:
 	_check(not _alive(mine), "mine exploded")
 	_check(_alive(unit) and is_equal_approx(unit.health.current_health, 4.0), "unit took 6 damage")
 	_check(was_stunned, "unit was stunned")
-	_check(knocked_to == Vector2i(8, 10), "unit was knocked back the way it came (got %s)" % knocked_to)
+	_check(knocked_to == Vector2i(8, 10), "unit was pushed back the way it came (got %s)" % knocked_to)
 	await _wait(3.0)
 	_check(unit.current_grid_pos == Vector2i(11, 10), "unit carried on to its goal after the stun")
 
@@ -171,15 +172,38 @@ func test_units_break_box_when_no_other_way() -> void:
 	_check(not _alive(box), "box was destroyed")
 	_check(unit.current_grid_pos == Vector2i(11, 10), "unit walked through the gap (at %s)" % unit.current_grid_pos)
 
-func test_knockback_stops_before_walls() -> void:
-	_wall(Vector2i(11, 12))
+func test_knockback_never_enters_walls() -> void:
+	_wall(Vector2i(10, 12))
 	var hitter := _spawn("Melee", Vector2i(8, 12), Entity.Team.PLAYER, AttackerBehavior.new())
-	hitter.combat.knockback = 3
+	hitter.combat.knockback_bonus = 3000.0
 	var dummy := _spawn("Melee", Vector2i(9, 12), Entity.Team.ENEMY, Behavior.new())
 	dummy.health.max_health = 1000.0
 	dummy.health.current_health = 1000.0
-	await _wait(1.0)
-	_check(dummy.current_grid_pos == Vector2i(10, 12), "pushed 1 tile, stopping before the wall (at %s)" % dummy.current_grid_pos)
+	var start := dummy.global_position
+	var furthest := 0.0
+	var entered_wall := false
+	for i in 2 * FPS:
+		await process_frame
+		furthest = maxf(furthest, dummy.global_position.distance_to(start))
+		entered_wall = entered_wall or game.get_node("MapManager").is_solid(dummy.current_grid_pos)
+	_check(furthest > 5.0, "a huge push moved the dummy (%.1f px)" % furthest)
+	_check(not entered_wall, "the wall stopped it (at %s)" % dummy.current_grid_pos)
+
+func test_push_scales_with_mass_and_bonus() -> void:
+	var lanes := []
+	for setup in [["Melee", 0.0, 9], ["Brute", 0.0, 11], ["Melee", 300.0, 13]]:
+		var y: int = setup[2]
+		var hitter := _spawn("Melee", Vector2i(7, y), Entity.Team.PLAYER, AttackerBehavior.new())
+		hitter.combat.knockback_bonus = setup[1]
+		var dummy := _spawn(setup[0], Vector2i(8, y), Entity.Team.ENEMY, Behavior.new())
+		dummy.health.max_health = 1000.0
+		dummy.health.current_health = 1000.0
+		lanes.append([dummy, dummy.global_position])
+	await _wait(0.6)
+	var moved := lanes.map(func(lane: Array) -> float: return lane[0].global_position.distance_to(lane[1]))
+	_check(moved[0] > 5.0, "a normal hit shoves a light unit (%.1f px)" % moved[0])
+	_check(moved[1] < moved[0], "a heavy unit is shoved less (%.1f vs %.1f px)" % [moved[1], moved[0]])
+	_check(moved[2] > moved[0], "a knockback bonus shoves further (%.1f vs %.1f px)" % [moved[2], moved[0]])
 
 func test_stun_stops_attacks_and_clears_target() -> void:
 	var hitter := _spawn("Melee", Vector2i(8, 12), Entity.Team.PLAYER, AttackerBehavior.new())

@@ -59,8 +59,9 @@ enum AttackType {MELEE, PROJECTILE, EXPLODE}
 @export var attack_range: float = 1.0
 @export var threat_range: float = 8.0
 @export var requires_line_of_sight: bool = true
-# tiles the target is pushed away on hit (never into walls or blockers)
-@export var knockback: int = 0
+# extra push on hit, on top of the natural push from damage (and, for melee, the attacker's mass × acceleration).
+# negative values push less than normal. measured like the natural push: velocity change × target mass
+@export var knockback_bonus: float = 0.0
 # seconds
 @export var stun_duration: float = 0.0
 # explode only: radius in tiles

@@ -9,7 +9,7 @@ var hit_radius: float = 20.0
 
 var direction: Vector2 = Vector2.RIGHT
 var damage: float = 0.0
-var knockback: int = 0
+var push: float = 0.0
 var stun_ticks: int = 0
 
 var _travelled: float = 0.0
@@ -19,10 +19,10 @@ func _configure(data: EntityData) -> void:
 	max_distance = data.projectile_max_distance * entity.world.map.tile_size
 	hit_radius = data.projectile_hit_radius
 
-func launch(dir: Vector2, dmg: float, kb: int, stun: int) -> void:
+func launch(dir: Vector2, dmg: float, push_strength: float, stun: int) -> void:
 	direction = dir.normalized()
 	damage = dmg
-	knockback = kb
+	push = push_strength
 	stun_ticks = stun
 	entity.rotation = direction.angle()
 
@@ -45,8 +45,8 @@ func _physics_process(delta: float) -> void:
 
 	for other in world.entities.get_entities_in_radius(tile, 1.5):
 		if _can_hit(other) and other.global_position.distance_to(entity.global_position) <= hit_radius:
-			# knock back along the flight direction
-			world.combat.queue_hit(other, damage, knockback, stun_ticks, other.current_grid_pos - Vector2i(direction.round()))
+			# push along the flight direction
+			world.combat.queue_hit(other, damage, push, stun_ticks, other.global_position - direction)
 			_expire()
 			return
 

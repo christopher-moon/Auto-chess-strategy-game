@@ -1,5 +1,5 @@
 # combat_manager: collects every hit made during a tick and applies them all at once when the tick resolves.
-# order of resolution: damage -> stun + knockback (survivors only) -> deaths.
+# order of resolution: damage -> stun + push (survivors only) -> deaths.
 # because nothing dies until every hit has landed, two units hitting each other on the same tick trade
 class_name CombatManager
 extends Node
@@ -7,10 +7,16 @@ extends Node
 class Hit:
 	var target: Entity
 	var damage: float
-	var knockback: int
+	# how hard the hit shoves: the target's velocity changes by push / target mass
+	var push: float
 	var stun_ticks: int
-	# the tile the hit came from; knockback pushes away from it
-	var origin_tile: Vector2i
+	# where the hit came from (world position); the push points away from it
+	var origin: Vector2
+
+# natural push per point of damage
+@export var push_per_damage: float = 30.0
+# natural push per unit of the attacker's pushing force (mass × acceleration), for melee blows
+@export var push_per_force: float = 0.15
 
 @onready var entity_manager: EntityManager = $"../EntityManager"
 @onready var map_manager: MapManager = $"../MapManager"
@@ -18,20 +24,20 @@ class Hit:
 var _hits: Array[Hit] = []
 var _kills: Array[Entity] = []
 
-func queue_hit(target: Entity, damage: float, knockback: int, stun_ticks: int, origin_tile: Vector2i) -> void:
+func queue_hit(target: Entity, damage: float, push: float, stun_ticks: int, origin: Vector2) -> void:
 	var hit := Hit.new()
 	hit.target = target
 	hit.damage = damage
-	hit.knockback = knockback
+	hit.push = push
 	hit.stun_ticks = stun_ticks
-	hit.origin_tile = origin_tile
+	hit.origin = origin
 	_hits.append(hit)
 
-# damages every hostile entity with health within `radius` tiles of `center`
-func queue_explosion(source: Entity, center: Vector2i, radius: float, damage: float, knockback: int, stun_ticks: int) -> void:
-	for other in entity_manager.get_entities_in_radius(center, radius):
+# damages and pushes every hostile entity with health within `radius` tiles of `source`
+func queue_explosion(source: Entity, radius: float, damage: float, push: float, stun_ticks: int) -> void:
+	for other in entity_manager.get_entities_in_radius(source.current_grid_pos, radius):
 		if other.is_alive and other.health and source.is_hostile_to(other):
-			queue_hit(other, damage, knockback, stun_ticks, center)
+			queue_hit(other, damage, push, stun_ticks, source.global_position)
 
 # removes an entity at the end of the tick (e.g. a mine that just exploded)
 func queue_kill(entity: Entity) -> void:
@@ -57,8 +63,8 @@ func resolve() -> void:
 			continue
 		if hit.stun_ticks > 0:
 			hit.target.apply_stun(hit.stun_ticks)
-		if hit.knockback > 0:
-			_apply_knockback(hit.target, hit.origin_tile, hit.knockback)
+		if hit.push > 0.0:
+			_apply_push(hit.target, hit.origin, hit.push)
 
 	# 3. deaths, all at once
 	for hit in hits:
@@ -68,25 +74,15 @@ func resolve() -> void:
 		if _is_live(entity):
 			entity_manager.remove_entity(entity)
 
-# push `target` up to `tiles` tiles straight away from `origin`, stopping before walls, holes and blockers
-func _apply_knockback(target: Entity, origin: Vector2i, tiles: int) -> void:
+# shove `target` away from `origin`. walls and other bodies stop it through normal collisions
+func _apply_push(target: Entity, origin: Vector2, push: float) -> void:
 	if target.movement == null:
 		return
-	var away := target.current_grid_pos - origin
-	if away == Vector2i.ZERO:
-		# hit from directly underneath (a mine): push back the way the unit came
-		away = -target.movement.facing
-	# snap to the main axis to match the 4-way grid
-	var direction := Vector2i(signi(away.x), 0) if absi(away.x) >= absi(away.y) else Vector2i(0, signi(away.y))
-
-	var destination := target.current_grid_pos
-	for i in tiles:
-		var next := destination + direction
-		if not target.world.is_tile_open(next, target):
-			break
-		destination = next
-	if destination != target.current_grid_pos:
-		target.movement.knock_to(destination)
+	var away := target.global_position - origin
+	if away.length() < 1.0:
+		# hit from directly underneath (a mine): push back the way the unit was going
+		away = -target.movement.velocity if target.movement.velocity.length() > 1.0 else -Vector2(target.movement.facing)
+	target.movement.apply_impulse(away.normalized() * push)
 
 func _is_live(entity: Variant) -> bool:
 	return is_instance_valid(entity) and entity.is_alive
