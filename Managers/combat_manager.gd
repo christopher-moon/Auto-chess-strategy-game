@@ -33,6 +33,10 @@ func queue_hit(target: Entity, damage: float, push: float, stun_ticks: int, orig
 	hit.origin = origin
 	_hits.append(hit)
 
+# a push with no damage (e.g. recoil), applied with the rest of the tick's hits
+func queue_push(target: Entity, push: float, origin: Vector2) -> void:
+	queue_hit(target, 0.0, push, 0, origin)
+
 # damages and pushes every hostile entity with health within `radius` tiles of `source`
 func queue_explosion(source: Entity, radius: float, damage: float, push: float, stun_ticks: int) -> void:
 	for other in entity_manager.get_entities_in_radius(source.current_grid_pos, radius):
@@ -59,7 +63,7 @@ func resolve() -> void:
 
 	# 2. stun and knockback, only for those still standing
 	for hit in hits:
-		if not _is_live(hit.target) or hit.target.health == null or hit.target.health.is_depleted():
+		if not _is_live(hit.target) or hit.target.health and hit.target.health.is_depleted():
 			continue
 		if hit.stun_ticks > 0:
 			hit.target.apply_stun(hit.stun_ticks)

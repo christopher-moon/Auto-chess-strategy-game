@@ -6,6 +6,8 @@ extends Component
 
 # AI ticks between automatic re-paths, so units react to tiles getting cheaper or pricier
 const REPATH_TICKS := 5
+# tiles: how far ahead along the path a unit looks for a straight line to cut across
+const STRING_PULL_TILES := 4
 # pixels: close enough to a waypoint to head for the next one
 const WAYPOINT_RADIUS := 12.0
 # pixels: close enough to the final tile to stop pushing
@@ -27,6 +29,8 @@ var goal_tile: Vector2i
 var has_goal: bool = false
 # set when a movement-blocking entity (box, turret) stands on the next tile. the behavior reads and clears it
 var blocker: Entity = null
+# while set, the unit runs straight at this entity instead of following a path (melee charging its target)
+var chase_target: Entity = null
 # direction of the last step taken (for knockback from directly underneath, and later for animations)
 var facing: Vector2i = Vector2i.RIGHT
 
@@ -34,7 +38,9 @@ var _body: CharacterBody2D # null if the shell isn't a CharacterBody2D; then the
 var _path: Array[Vector2i] = [] # tiles still to visit, not counting the current waypoint
 var _waypoint: Vector2i
 var _has_waypoint: bool = false
-var _ticks_since_path: int = 0
+# spreads units' periodic re-paths over different ticks, so a big wave doesn't path all on the same frame
+var _repath_phase: int = 0
+static var _spawn_count: int = 0
 
 func _configure(data: EntityData) -> void:
 	mass = maxf(data.mass, 0.01)
@@ -42,6 +48,8 @@ func _configure(data: EntityData) -> void:
 	acceleration = data.move_force / mass
 	friction = data.friction
 	radius = data.body_radius
+	_repath_phase = _spawn_count % REPATH_TICKS
+	_spawn_count += 1
 
 	var node: Node = entity
 	_body = node as CharacterBody2D
@@ -52,19 +60,30 @@ func _configure(data: EntityData) -> void:
 
 # ask to walk to a tile. repaths when the goal changed, the path ran out, or every REPATH_TICKS
 func request_goal(tile: Vector2i) -> void:
-	_ticks_since_path += 1
+	chase_target = null
 	var path_done := _path.is_empty() and not _has_waypoint and entity.current_grid_pos != tile
-	var needs_path := not has_goal or tile != goal_tile or _ticks_since_path >= REPATH_TICKS or path_done
+	var needs_path := not has_goal or tile != goal_tile or is_repath_due() or path_done
 	goal_tile = tile
 	has_goal = true
 	if needs_path:
 		_repath()
+
+# run straight at `target` at full speed and keep pushing into it. collisions do the rest
+func chase(target: Entity) -> void:
+	if target != chase_target:
+		stop()
+		chase_target = target
+
+# true on this unit's periodic re-path tick (a good moment to re-pick the goal too)
+func is_repath_due() -> bool:
+	return (entity.ticks_alive + _repath_phase) % REPATH_TICKS == 0
 
 # stop pushing; friction brings the unit to rest
 func stop() -> void:
 	_path.clear()
 	_has_waypoint = false
 	has_goal = false
+	chase_target = null
 
 func is_moving() -> bool:
 	return _has_waypoint or not _path.is_empty()
@@ -78,7 +97,6 @@ func apply_impulse(impulse: Vector2) -> void:
 	velocity += impulse / mass
 
 func _repath() -> void:
-	_ticks_since_path = 0
 	var origin := get_path_origin()
 	_path = entity.world.map.get_tile_path(origin, goal_tile)
 	if not _path.is_empty() and _path[0] == origin:
@@ -107,6 +125,14 @@ func _physics_process(delta: float) -> void:
 func _steer() -> Vector2:
 	if entity.is_stunned():
 		return Vector2.ZERO
+	if chase_target:
+		if not is_instance_valid(chase_target) or not chase_target.is_alive:
+			chase_target = null
+			return Vector2.ZERO
+		var direction := entity.global_position.direction_to(chase_target.global_position)
+		if direction != Vector2.ZERO:
+			facing = Vector2i(direction.round())
+		return direction * max_speed
 	if not _has_waypoint and not _next_waypoint():
 		return Vector2.ZERO
 
@@ -149,7 +175,9 @@ func _next_waypoint() -> bool:
 	# string-pulling: skip ahead to later waypoints we can walk to in a straight line, so units
 	# cut across open ground instead of zig-zagging tile by tile
 	var allowed := {next: true, entity.current_grid_pos: true}
-	while not _path.is_empty():
+	var lookahead := STRING_PULL_TILES
+	while not _path.is_empty() and lookahead > 0:
+		lookahead -= 1
 		allowed[_path[0]] = true
 		if not _can_walk_straight(entity.global_position, _path[0], allowed):
 			break

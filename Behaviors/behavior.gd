@@ -57,7 +57,7 @@ func _move_to_objective(entity: Entity) -> int:
 	var movement := entity.movement
 	var goal: Variant = movement.goal_tile if movement.has_goal and map.is_objective(movement.goal_tile) else null
 	# re-pick the objective tile now and then, in case a cheaper one opened up
-	if goal == null or entity.ticks_alive % MovementComponent.REPATH_TICKS == 0:
+	if goal == null or movement.is_repath_due():
 		goal = map.find_nearest_objective_tile(movement.get_path_origin())
 	if goal == null:
 		return Id.IDLE

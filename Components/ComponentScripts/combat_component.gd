@@ -9,6 +9,8 @@ var attack_range: float = 1.0
 var threat_range: float = 8.0
 var requires_line_of_sight: bool = true
 var knockback_bonus: float = 0.0
+var charge_while_attacking: bool = true
+var recoil: float = 0.0
 var stun_ticks: int = 0
 var aoe_radius: float = 1.5
 var projectile_name: String = ""
@@ -28,6 +30,8 @@ func _configure(data: EntityData) -> void:
 	threat_range = data.threat_range
 	requires_line_of_sight = data.requires_line_of_sight
 	knockback_bonus = data.knockback_bonus
+	charge_while_attacking = data.charge_while_attacking
+	recoil = data.recoil
 	stun_ticks = entity.world.seconds_to_ticks(data.stun_duration) if data.stun_duration > 0.0 else 0
 	aoe_radius = data.aoe_radius
 	projectile_name = data.projectile_name
@@ -74,6 +78,8 @@ func attack(other: Entity) -> void:
 		EntityData.AttackType.EXPLODE:
 			world.combat.queue_explosion(entity, aoe_radius, damage, get_push(false), stun_ticks)
 			world.combat.queue_kill(entity)
+	if recoil > 0.0:
+		world.combat.queue_push(entity, recoil, other.global_position)
 
 # how hard this unit's hits shove: attack power, plus the bonus, plus (for body blows) the attacker's
 # own pushing force, mass × acceleration. the target's velocity changes by push / target mass
