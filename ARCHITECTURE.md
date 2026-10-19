@@ -41,6 +41,9 @@ Units (actors) are `CharacterBody2D` circles (`body_radius`) with their own velo
 - a light separation force spreads crowds out so they don't jam
 - paths are 8-way, but a diagonal step never clips the corner of a wall or a pricey tile (mine, box); waypoints are string-pulled (up to 4 tiles ahead), so units walk straight across open ground
 - periodic re-paths are spread over different ticks per unit, so a big wave doesn't path all on the same frame
+- a unit steps around a unit right in front of it, always passing on its own right, so two units walking into each other slide past instead of locking up. Heavier units don't step around lighter ones; they shove through
+- a unit that pushes for 1s without getting closer to its goal (someone is standing on it, or a crowd won't let it through) gives up, idles, and tries again 3s later
+- attackers prefer objective tiles nobody else is standing on or heading for
 
 ### Knockback
 
@@ -56,13 +59,15 @@ Pushes never snowball:
 
 ### Fighting on the move
 
-With `charge_while_attacking` on (the default, used by Melee and Brute), a unit in the Attacking state runs straight at its target at full speed and bumps into it, then stays in contact, closing in again whenever a hit knocks the target back. With it off (Ranged), the unit stands still while it shoots; if recoil or a shove carries it out of range, it walks back in.
+Attacking is not a standing-still state: a unit with a target stays in the Attacking state while it moves, and hits whenever the target is in range and its cooldown is ready. Out of range, it walks to the nearest tile it can attack from.
+
+With `charge_while_attacking` on (the default, used by Melee and Brute), a unit in the Attacking state runs straight at its target at full speed (once it is in sight and within a tile of attack range) and bumps into it, then stays in contact, closing in again whenever a hit knocks the target back. With it off (Ranged), the unit stands still while it shoots; if recoil or a shove carries it out of range, it walks back in.
 
 Units no longer stop exactly on tile centres; the tile a unit is "on" is the tile under its centre. Try the Brute (key 7, mass 3) against Melee units to see weight at work.
 
 ## AI: behaviors and states
 
-A unit has exactly one active state (`States/`): **Idle**, **Moving**, **Attacking** or **Stunned**. Each tick, its **behavior** (`Behaviors/`) picks the state, and the `StateMachine` switches and runs it.
+A unit has exactly one active state (`States/`): **Idle**, **Moving**, **Attacking** (fighting a target, moving included) or **Stunned**. Each tick, its **behavior** (`Behaviors/`) picks the state, and the `StateMachine` switches and runs it.
 
 - **Attacker**: fights any visible enemy in threat range. With nobody in sight, it walks to the cheapest objective tile.
 - **Defender**: guards its home tile (`Entity.home_tile`, the tile it spawned on). It only fights from tiles within `leash_range` tiles of home, and walks back home whenever it is out of combat.
@@ -93,4 +98,4 @@ The level timer starts when the first Player unit is placed. The level is won by
 godot --headless --fixed-fps 60 --script res://Tests/engine_tests.gd
 ```
 
-The tests cover trading, ranged units holding at range and recoiling, melee charging, knockback not stacking, defenders returning home, AI not tied to team, line of sight, mines, boxes, knockback, stun, spawner caps, capture, the defender leash, and the physics (inertia by mass, units taking up space, shoving, wall collisions).
+The tests cover trading, attacking on the move, units passing each other and giving up on taken tiles, ranged units holding at range and recoiling, melee charging, knockback not stacking, defenders returning home, AI not tied to team, line of sight, mines, boxes, knockback, stun, spawner caps, capture, the defender leash, and the physics (inertia by mass, units taking up space, shoving, wall collisions).

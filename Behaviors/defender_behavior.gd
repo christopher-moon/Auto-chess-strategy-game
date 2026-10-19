@@ -32,7 +32,8 @@ func decide(entity: Entity) -> int:
 	return _return_home(entity)
 
 func _return_home(entity: Entity) -> int:
-	if entity.movement == null or entity.current_grid_pos == entity.home_tile and not entity.movement.is_moving():
+	var movement := entity.movement
+	if movement == null or movement.is_waiting() or entity.current_grid_pos == entity.home_tile and not movement.is_moving():
 		return Id.IDLE
-	entity.movement.request_goal(entity.home_tile)
-	return Id.MOVING
+	movement.request_goal(entity.home_tile)
+	return Id.MOVING if movement.is_moving() else Id.IDLE

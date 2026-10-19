@@ -134,8 +134,12 @@ func get_line_tiles(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 func is_objective(grid_pos: Vector2i) -> bool:
 	return _objective_lookup.has(grid_pos)
 
-# the objective tile that is cheapest to walk to (checks the few closest by straight distance)
-func find_nearest_objective_tile(from: Vector2i) -> Variant:
+# extra path cost for an objective tile someone is already standing on, so units spread over the zone
+const TAKEN_TILE_COST := 4.0
+
+# the objective tile that is cheapest to walk to (checks the few closest by straight distance).
+# tiles in `taken` count as pricier
+func find_nearest_objective_tile(from: Vector2i, taken: Dictionary = {}) -> Variant:
 	var candidates := objective_tiles.duplicate()
 	candidates.sort_custom(func(a: Vector2i, b: Vector2i) -> bool: return _manhattan(a, from) < _manhattan(b, from))
 
@@ -147,7 +151,7 @@ func find_nearest_objective_tile(from: Vector2i) -> Variant:
 		var path := get_tile_path(from, tile)
 		if path.is_empty():
 			continue
-		var cost := get_path_cost(path)
+		var cost := get_path_cost(path) + (TAKEN_TILE_COST if taken.has(tile) else 0.0)
 		if cost < best_cost:
 			best_cost = cost
 			best = tile
