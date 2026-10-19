@@ -12,6 +12,8 @@ const STRING_PULL_TILES := 4
 const WAYPOINT_RADIUS := 12.0
 # pixels: close enough to the final tile to stop pushing
 const ARRIVE_RADIUS := 3.0
+# pixels: a charging unit stops pushing once its body is this close to its target's
+const CONTACT_GAP := 2.0
 # pixels: start easing off this far from the final tile
 const SLOW_RADIUS := 40.0
 # how hard units steer away from nearby units while walking (fraction of top speed)
@@ -68,7 +70,7 @@ func request_goal(tile: Vector2i) -> void:
 	if needs_path:
 		_repath()
 
-# run straight at `target` at full speed and keep pushing into it. collisions do the rest
+# run straight at `target` at full speed until we bump into it, then stay in contact
 func chase(target: Entity) -> void:
 	if target != chase_target:
 		stop()
@@ -92,9 +94,12 @@ func is_moving() -> bool:
 func get_path_origin() -> Vector2i:
 	return entity.current_grid_pos
 
-# instant change of momentum (knockback, explosions): heavier units are moved less
+# instant change of momentum (knockback, explosions): heavier units are moved less.
+# a push never leaves the unit faster than the push alone would (or than it was already going),
+# so hits in a row don't stack into a launch
 func apply_impulse(impulse: Vector2) -> void:
-	velocity += impulse / mass
+	var kick := impulse / mass
+	velocity = (velocity + kick).limit_length(maxf(kick.length(), maxf(velocity.length(), max_speed)))
 
 func _repath() -> void:
 	var origin := get_path_origin()
@@ -129,10 +134,12 @@ func _steer() -> Vector2:
 		if not is_instance_valid(chase_target) or not chase_target.is_alive:
 			chase_target = null
 			return Vector2.ZERO
-		var direction := entity.global_position.direction_to(chase_target.global_position)
-		if direction != Vector2.ZERO:
-			facing = Vector2i(direction.round())
-		return direction * max_speed
+		var offset := chase_target.global_position - entity.global_position
+		if offset != Vector2.ZERO:
+			facing = Vector2i(offset.normalized().round())
+		if offset.length() <= radius + chase_target.data.body_radius + CONTACT_GAP:
+			return Vector2.ZERO
+		return offset.normalized() * max_speed
 	if not _has_waypoint and not _next_waypoint():
 		return Vector2.ZERO
 

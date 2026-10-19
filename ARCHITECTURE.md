@@ -46,13 +46,17 @@ Units (actors) are `CharacterBody2D` circles (`body_radius`) with their own velo
 
 A hit adds a push to the target's velocity: `velocity += direction × push / target mass`, and friction bleeds it off. Walls and other bodies stop it through normal collisions.
 
+Pushes never snowball:
+- all pushes a unit takes in one tick combine into one, no stronger than the strongest of them, so three attackers knock a unit back no harder than one (hits from opposite sides cancel out)
+- a push never leaves a unit faster than that push alone would, or than it was already moving, so hits in a row don't stack into a launch
+
 `push = damage × push_per_damage + knockback_bonus`, and melee blows also add the attacker's own pushing force, `mass × acceleration × push_per_force`. `push_per_damage` and `push_per_force` are on the CombatManager node; `knockback_bonus` is per unit (negative for weaker shoves).
 
 `recoil` (per unit) is a set push the attacker takes away from its target with every attack, applied with the tick's other hits. Ranged units use it for a bow's kick.
 
 ### Fighting on the move
 
-With `charge_while_attacking` on (the default, used by Melee and Brute), a unit in the Attacking state keeps running straight at its target at full speed, so fights turn into shoving scrums. With it off (Ranged), the unit holds its position while it shoots; if recoil or a shove carries it out of range, it walks back in.
+With `charge_while_attacking` on (the default, used by Melee and Brute), a unit in the Attacking state runs straight at its target at full speed and bumps into it, then stays in contact, closing in again whenever a hit knocks the target back. With it off (Ranged), the unit holds the tile it started shooting from; if recoil or a shove knocks it off, it steps back on.
 
 Units no longer stop exactly on tile centres; the tile a unit is "on" is the tile under its centre. Try the Brute (key 7, mass 3) against Melee units to see weight at work.
 
@@ -61,7 +65,7 @@ Units no longer stop exactly on tile centres; the tile a unit is "on" is the til
 A unit has exactly one active state (`States/`): **Idle**, **Moving**, **Attacking** or **Stunned**. Each tick, its **behavior** (`Behaviors/`) picks the state, and the `StateMachine` switches and runs it.
 
 - **Attacker**: fights any visible enemy in threat range. With nobody in sight, it walks to the cheapest objective tile.
-- **Defender**: walks to the objective. It only fights from tiles within `leash_range` walking tiles of an objective tile.
+- **Defender**: guards its home tile (`Entity.home_tile`, the tile it spawned on). It only fights from tiles within `leash_range` tiles of home, and walks back home whenever it is out of combat.
 - **Stationary** (turrets): shoots the nearest visible enemy in range.
 - **Mine**: explodes once triggered.
 
@@ -69,7 +73,7 @@ Behaviors are shared resources, so they keep no per-unit data. The target lives 
 
 For a new behavior (patrol, for example), extend `Behavior` and override `decide()`.
 
-Fighting units without a behavior in their data get the spawner's team default: Player units are attackers and Enemy units are defenders.
+AI is never tied to team; either side can use any behavior. A unit's AI comes from, in order: the `behavior` passed to `spawn_entity` (a card or the debug controls), the `behavior` in its data, or the spawner's `default_unit_behavior` (Attacker). A Spawner's units use its data's `spawn_behavior` when set.
 
 ## Map
 
@@ -78,7 +82,7 @@ Fighting units without a behavior in their data get the spawner's team default: 
 ## Debug controls (game.tscn)
 
 `1` Melee, `2` Ranged, `3` Mine, `4` Turret, `5` Spawner, `6` Box, `7` Brute (all at the mouse tile)
-`Tab` switch team · `W` toggle wall · `O` toggle objective tile · `X` delete · `S` stun
+`Tab` switch team · `A` switch the AI placed units get (Attacker / Defender) · `W` toggle wall · `O` toggle objective tile · `X` delete · `S` stun
 `L` line of sight · `H` debug labels and lines · `Space` pause · `R` restart
 
 The level timer starts when the first Player unit is placed. The level is won by holding the zone uncontested for 5s. It is lost when time runs out or every Player unit dies.
@@ -89,4 +93,4 @@ The level timer starts when the first Player unit is placed. The level is won by
 godot --headless --fixed-fps 60 --script res://Tests/engine_tests.gd
 ```
 
-The tests cover trading, ranged units holding at range and recoiling, melee charging, line of sight, mines, boxes, knockback, stun, spawner caps, capture, the defender leash, and the physics (inertia by mass, units taking up space, shoving, wall collisions).
+The tests cover trading, ranged units holding at range and recoiling, melee charging, knockback not stacking, defenders returning home, AI not tied to team, line of sight, mines, boxes, knockback, stun, spawner caps, capture, the defender leash, and the physics (inertia by mass, units taking up space, shoving, wall collisions).

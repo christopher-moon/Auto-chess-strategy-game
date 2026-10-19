@@ -34,7 +34,10 @@ func _run() -> void:
 		"test_melee_units_trade",
 		"test_ranged_holds_at_range",
 		"test_ranged_recoils_when_shooting",
+		"test_ranged_holds_its_spot_under_recoil",
 		"test_melee_charges_while_attacking",
+		"test_ganging_up_doesnt_multiply_knockback",
+		"test_pushes_dont_stack_into_a_launch",
 		"test_line_of_sight_blocks_detection",
 		"test_units_path_around_mines",
 		"test_mine_explodes_when_walked_over",
@@ -46,6 +49,8 @@ func _run() -> void:
 		"test_spawner_respects_max_count",
 		"test_attacker_captures_objective",
 		"test_defender_stays_leashed",
+		"test_defender_returns_home",
+		"test_ai_is_not_tied_to_team",
 		"test_units_accelerate_by_mass",
 		"test_units_take_up_space",
 		"test_heavy_units_shove_light_ones",
@@ -134,6 +139,24 @@ func test_ranged_recoils_when_shooting() -> void:
 	_check(ranged.global_position.x < start.x - 3.0, "the shot kicked it backwards (%.1f px)" % (start.x - ranged.global_position.x))
 	_check(absf(ranged.global_position.y - start.y) < 1.0, "straight away from the target")
 
+func test_ranged_holds_its_spot_under_recoil() -> void:
+	var ranged := _spawn("Ranged", Vector2i(8, 10), Entity.Team.PLAYER, AttackerBehavior.new())
+	var dummy := _spawn("Melee", Vector2i(11, 10), Entity.Team.ENEMY, Behavior.new())
+	dummy.health.max_health = 1000.0
+	dummy.health.current_health = 1000.0
+	ranged.combat.recoil = 350.0 # strong enough to knock it off its tile
+	var first_shots := 0
+	var later_shots := 0
+	for i in 8 * FPS:
+		await process_frame
+		var back := 8 - ranged.current_grid_pos.x
+		if i < 2 * FPS:
+			first_shots = maxi(first_shots, back)
+		else:
+			later_shots = maxi(later_shots, back)
+	_check(first_shots >= 1, "the recoil knocked it off its spot")
+	_check(later_shots <= first_shots, "but it keeps stepping back onto it instead of drifting away (%d then %d tiles back)" % [first_shots, later_shots])
+
 func test_melee_charges_while_attacking() -> void:
 	var hitter := _spawn("Melee", Vector2i(8, 12), Entity.Team.PLAYER, AttackerBehavior.new())
 	var dummy := _spawn("Melee", Vector2i(9, 12), Entity.Team.ENEMY, Behavior.new())
@@ -143,9 +166,30 @@ func test_melee_charges_while_attacking() -> void:
 	await _wait(1.0)
 	_check(hitter.state_machine.current_id == StateMachine.StateId.ATTACKING, "unit is attacking")
 	var gap := hitter.global_position.distance_to(dummy.global_position)
-	_check(gap < hitter.movement.radius + dummy.movement.radius + 2.0, "it ran into its target (%.1f px apart)" % gap)
+	_check(gap < hitter.movement.radius + dummy.movement.radius + 4.0, "it ran into its target (%.1f px apart)" % gap)
 	await _wait(2.0)
-	_check(dummy.global_position.x > start.x + 20.0, "it kept driving the target back (%.1f px)" % (dummy.global_position.x - start.x))
+	gap = hitter.global_position.distance_to(dummy.global_position)
+	_check(gap < hitter.movement.radius + dummy.movement.radius + 12.0, "it follows the target as it gets knocked back (%.1f px apart)" % gap)
+	_check(dummy.global_position.x - start.x < 64.0, "but doesn't plough it across the map (%.1f px)" % (dummy.global_position.x - start.x))
+
+func test_ganging_up_doesnt_multiply_knockback() -> void:
+	var dummy := _spawn("Melee", Vector2i(9, 12), Entity.Team.ENEMY, Behavior.new())
+	dummy.health.max_health = 1000.0
+	dummy.health.current_health = 1000.0
+	for tile in [Vector2i(8, 11), Vector2i(8, 12), Vector2i(8, 13)]:
+		_spawn("Melee", tile, Entity.Team.PLAYER, AttackerBehavior.new())
+	var fastest := 0.0
+	for i in 4 * FPS:
+		await process_frame
+		fastest = maxf(fastest, dummy.movement.velocity.length())
+	var one_hit: float = game.get_node("EntitySpawner").get_data("Melee").damage * game.get_node("CombatManager").push_per_damage + 90.0
+	_check(fastest <= one_hit + 1.0, "three attackers knock it no faster than one hit (%.0f, one hit %.0f)" % [fastest, one_hit])
+
+func test_pushes_dont_stack_into_a_launch() -> void:
+	var unit := _spawn("Melee", Vector2i(9, 12), Entity.Team.PLAYER, Behavior.new())
+	unit.movement.apply_impulse(Vector2(150, 0))
+	unit.movement.apply_impulse(Vector2(150, 0))
+	_check(is_equal_approx(unit.movement.velocity.length(), 150.0), "two pushes in a row: 150, not 300 (%.0f)" % unit.movement.velocity.length())
 
 func test_line_of_sight_blocks_detection() -> void:
 	_wall(Vector2i(10, 10))
@@ -262,15 +306,33 @@ func test_attacker_captures_objective() -> void:
 	_check(level.state == LevelManager.LevelState.WON, "zone captured (state %s, progress %s)" % [level.state, level.capture_progress])
 
 func test_defender_stays_leashed() -> void:
-	var defender := _spawn("Melee", Vector2i(12, 14), Entity.Team.ENEMY)
-	# 5 walking tiles from the objective: inside threat range, outside the leash
+	var defender := _spawn("Melee", Vector2i(12, 14), Entity.Team.ENEMY, DefenderBehavior.new())
+	# 5 tiles from home: inside threat range, outside the leash
 	var far := _spawn("Melee", Vector2i(12, 9), Entity.Team.PLAYER, Behavior.new())
 	await _wait(3.0)
 	_check(is_equal_approx(far.health.current_health, far.health.max_health), "defender ignored the unit outside its leash")
-	_check(game.get_node("MapManager").distance_to_objective(defender.current_grid_pos) == 0, "defender stayed on the objective")
+	_check(defender.current_grid_pos == defender.home_tile, "defender stayed home")
 	var near := _spawn("Melee", Vector2i(12, 12), Entity.Team.PLAYER, Behavior.new())
 	await _wait(3.0)
 	_check(near.health.current_health < near.health.max_health, "defender fought the unit inside its leash")
+
+func test_defender_returns_home() -> void:
+	var defender := _spawn("Melee", Vector2i(8, 10), Entity.Team.PLAYER, DefenderBehavior.new())
+	_check(defender.home_tile == Vector2i(8, 10), "home is the spawn tile")
+	defender.movement.velocity = Vector2(0, 400)
+	await _wait(0.6)
+	_check(defender.current_grid_pos != defender.home_tile, "a shove carried it off home (at %s)" % defender.current_grid_pos)
+	await _wait(3.0)
+	_check(defender.current_grid_pos == defender.home_tile, "walked back home (at %s)" % defender.current_grid_pos)
+
+func test_ai_is_not_tied_to_team() -> void:
+	var level: LevelManager = game.get_node("LevelManager")
+	var defender := _spawn("Melee", Vector2i(2, 1), Entity.Team.PLAYER, DefenderBehavior.new())
+	var attacker := _spawn("Melee", Vector2i(9, 9), Entity.Team.ENEMY, AttackerBehavior.new())
+	await _wait(8.0)
+	_check(defender.current_grid_pos == Vector2i(2, 1), "a Player defender guards its spawn tile")
+	_check(game.get_node("MapManager").is_objective(attacker.current_grid_pos), "an Enemy attacker heads for the objective (at %s)" % attacker.current_grid_pos)
+	_check(level.state != LevelManager.LevelState.WON, "and it doesn't capture for the Player")
 
 func test_units_accelerate_by_mass() -> void:
 	var light := _spawn("Melee", Vector2i(6, 10), Entity.Team.PLAYER, GoTo.new(Vector2i(13, 10)))

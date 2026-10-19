@@ -61,14 +61,20 @@ func resolve() -> void:
 		if _is_live(hit.target) and hit.target.health:
 			hit.target.health.apply_damage(hit.damage)
 
-	# 2. stun and knockback, only for those still standing
+	# 2. stun and knockback, only for those still standing. all pushes on a unit this tick combine into one,
+	# no stronger than the strongest of them, so ganging up on a unit doesn't multiply its knockback
+	var pushes := {} # target -> [combined push vector, strongest push]
 	for hit in hits:
 		if not _is_live(hit.target) or hit.target.health and hit.target.health.is_depleted():
 			continue
 		if hit.stun_ticks > 0:
 			hit.target.apply_stun(hit.stun_ticks)
-		if hit.push > 0.0:
-			_apply_push(hit.target, hit.origin, hit.push)
+		if hit.push > 0.0 and hit.target.movement:
+			var push: Array = pushes.get_or_add(hit.target, [Vector2.ZERO, 0.0])
+			push[0] += _push_direction(hit.target, hit.origin) * hit.push
+			push[1] = maxf(push[1], hit.push)
+	for target: Entity in pushes:
+		target.movement.apply_impulse(pushes[target][0].limit_length(pushes[target][1]))
 
 	# 3. deaths, all at once
 	for hit in hits:
@@ -78,15 +84,13 @@ func resolve() -> void:
 		if _is_live(entity):
 			entity_manager.remove_entity(entity)
 
-# shove `target` away from `origin`. walls and other bodies stop it through normal collisions
-func _apply_push(target: Entity, origin: Vector2, push: float) -> void:
-	if target.movement == null:
-		return
+# the way a hit from `origin` shoves `target`. walls and other bodies stop the push through normal collisions
+func _push_direction(target: Entity, origin: Vector2) -> Vector2:
 	var away := target.global_position - origin
 	if away.length() < 1.0:
 		# hit from directly underneath (a mine): push back the way the unit was going
 		away = -target.movement.velocity if target.movement.velocity.length() > 1.0 else -Vector2(target.movement.facing)
-	target.movement.apply_impulse(away.normalized() * push)
+	return away.normalized()
 
 func _is_live(entity: Variant) -> bool:
 	return is_instance_valid(entity) and entity.is_alive
