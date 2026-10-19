@@ -56,7 +56,7 @@ Pushes never snowball:
 
 ### Fighting on the move
 
-With `charge_while_attacking` on (the default, used by Melee and Brute), a unit in the Attacking state runs straight at its target at full speed and bumps into it, then stays in contact, closing in again whenever a hit knocks the target back. With it off (Ranged), the unit holds the tile it started shooting from; if recoil or a shove knocks it off, it steps back on.
+With `charge_while_attacking` on (the default, used by Melee and Brute), a unit in the Attacking state runs straight at its target at full speed and bumps into it, then stays in contact, closing in again whenever a hit knocks the target back. With it off (Ranged), the unit stands still while it shoots; if recoil or a shove carries it out of range, it walks back in.
 
 Units no longer stop exactly on tile centres; the tile a unit is "on" is the tile under its centre. Try the Brute (key 7, mass 3) against Melee units to see weight at work.
 

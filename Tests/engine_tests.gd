@@ -34,7 +34,6 @@ func _run() -> void:
 		"test_melee_units_trade",
 		"test_ranged_holds_at_range",
 		"test_ranged_recoils_when_shooting",
-		"test_ranged_holds_its_spot_under_recoil",
 		"test_melee_charges_while_attacking",
 		"test_ganging_up_doesnt_multiply_knockback",
 		"test_pushes_dont_stack_into_a_launch",
@@ -138,24 +137,6 @@ func test_ranged_recoils_when_shooting() -> void:
 	await _wait(0.5)
 	_check(ranged.global_position.x < start.x - 3.0, "the shot kicked it backwards (%.1f px)" % (start.x - ranged.global_position.x))
 	_check(absf(ranged.global_position.y - start.y) < 1.0, "straight away from the target")
-
-func test_ranged_holds_its_spot_under_recoil() -> void:
-	var ranged := _spawn("Ranged", Vector2i(8, 10), Entity.Team.PLAYER, AttackerBehavior.new())
-	var dummy := _spawn("Melee", Vector2i(11, 10), Entity.Team.ENEMY, Behavior.new())
-	dummy.health.max_health = 1000.0
-	dummy.health.current_health = 1000.0
-	ranged.combat.recoil = 350.0 # strong enough to knock it off its tile
-	var first_shots := 0
-	var later_shots := 0
-	for i in 8 * FPS:
-		await process_frame
-		var back := 8 - ranged.current_grid_pos.x
-		if i < 2 * FPS:
-			first_shots = maxi(first_shots, back)
-		else:
-			later_shots = maxi(later_shots, back)
-	_check(first_shots >= 1, "the recoil knocked it off its spot")
-	_check(later_shots <= first_shots, "but it keeps stepping back onto it instead of drifting away (%d then %d tiles back)" % [first_shots, later_shots])
 
 func test_melee_charges_while_attacking() -> void:
 	var hitter := _spawn("Melee", Vector2i(8, 12), Entity.Team.PLAYER, AttackerBehavior.new())
