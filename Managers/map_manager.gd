@@ -17,6 +17,10 @@ const OBJECTIVE_SOURCE_ID := 2
 var astar_grid: AStarGrid2D
 var tile_size: float = 64.0
 
+# one static collider per solid tile (walls, holes, and a ring around the map) so physical units can't leave the floor
+var _solid_body: StaticBody2D
+var _solid_shapes: Dictionary = {}
+
 var objective_tiles: Array[Vector2i] = []
 var _objective_lookup: Dictionary = {}
 # walking distance (in tiles) from every reachable tile to the nearest objective tile
@@ -53,6 +57,17 @@ func setup_grid() -> void:
 	for cell in obstacle_layer.get_used_cells():
 		if astar_grid.is_in_boundsv(cell):
 			astar_grid.set_point_solid(cell, true)
+
+	# 5. Physical colliders for every solid tile, plus a border ring outside the map
+	_solid_body = StaticBody2D.new()
+	_solid_body.name = "SolidTiles"
+	add_child(_solid_body)
+	var region := astar_grid.region.grow(1)
+	for x in range(region.position.x, region.end.x):
+		for y in range(region.position.y, region.end.y):
+			var cell := Vector2i(x, y)
+			if is_solid(cell):
+				_set_tile_collider(cell, true)
 
 # --- PUBLIC HELPER FUNCTIONS ---
 func world_to_grid(world_pos: Vector2) -> Vector2i:
@@ -161,6 +176,7 @@ func set_wall(grid_pos: Vector2i, solid: bool) -> void:
 	else:
 		obstacle_layer.erase_cell(grid_pos)
 	astar_grid.set_point_solid(grid_pos, solid or ground_layer.get_cell_source_id(grid_pos) == -1)
+	_set_tile_collider(grid_pos, is_solid(grid_pos))
 	refresh_objectives()
 
 func set_objective(grid_pos: Vector2i, enabled: bool) -> void:
@@ -171,6 +187,21 @@ func set_objective(grid_pos: Vector2i, enabled: bool) -> void:
 	else:
 		objective_layer.erase_cell(grid_pos)
 	refresh_objectives()
+
+func _set_tile_collider(grid_pos: Vector2i, solid: bool) -> void:
+	if solid == _solid_shapes.has(grid_pos):
+		return
+	if not solid:
+		_solid_shapes[grid_pos].queue_free()
+		_solid_shapes.erase(grid_pos)
+		return
+	var box := RectangleShape2D.new()
+	box.size = Vector2.ONE * tile_size
+	var collider := CollisionShape2D.new()
+	collider.shape = box
+	collider.position = _solid_body.to_local(grid_to_world(grid_pos))
+	_solid_body.add_child(collider)
+	_solid_shapes[grid_pos] = collider
 
 func _manhattan(a: Vector2i, b: Vector2i) -> int:
 	return absi(a.x - b.x) + absi(a.y - b.y)

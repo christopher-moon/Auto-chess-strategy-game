@@ -25,10 +25,22 @@ An entity is a shell scene (`Entities/actor.tscn`, `obstacle.tscn`, `trigger.tsc
 | Turret | health, combat | blocks movement; stationary behavior |
 | Spawner | health, spawner | spawns its team's units on a timer, up to a max count |
 | Box | health | blocks movement and sight, not pathfinding (weight 20) |
+| Brute | health, movement, combat | heavy melee (mass 3): slow to start, shoves others, knockback 2 |
 
 To add an entity, make a new `EntityData` .tres and add it to `EntitySpawner.entity_library` in `game.tscn`.
 
 `Systems/world.gd` holds references to the managers and is injected into every entity, so components never search the scene tree.
+
+## Physical movement
+
+Units (actors) are `CharacterBody2D` circles (`body_radius`) with their own velocity. The AI still picks a goal tile on ticks and A* still makes the tile path; every physics frame the `MovementComponent` steers towards the next waypoint:
+
+- acceleration = `move_force / mass`, top speed = `move_speed / sqrt(mass)`, and `friction` slows a unit down when it isn't pushing
+- `move_and_slide()` handles collisions with walls, holes and the map edge (`MapManager` builds a static collider per solid tile), structures and other units
+- walking into another unit shoves it by `mass / (your mass + their mass)`, so heavy units plough through light ones
+- a light separation force spreads crowds out so they don't jam
+
+Units no longer stop exactly on tile centres; the tile a unit is "on" is the tile under its centre. Try the Brute (key 7, mass 3) against Melee units to see weight at work.
 
 ## AI: behaviors and states
 
@@ -51,7 +63,7 @@ Fighting units without a behavior in their data get the spawner's team default: 
 
 ## Debug controls (game.tscn)
 
-`1` Melee, `2` Ranged, `3` Mine, `4` Turret, `5` Spawner, `6` Box (all at the mouse tile)
+`1` Melee, `2` Ranged, `3` Mine, `4` Turret, `5` Spawner, `6` Box, `7` Brute (all at the mouse tile)
 `Tab` switch team · `W` toggle wall · `O` toggle objective tile · `X` delete · `S` stun
 `L` line of sight · `H` debug labels and lines · `Space` pause · `R` restart
 
@@ -63,4 +75,4 @@ The level timer starts when the first Player unit is placed. The level is won by
 godot --headless --fixed-fps 60 --script res://Tests/engine_tests.gd
 ```
 
-The tests cover trading, range positioning, line of sight, mines, boxes, knockback, stun, spawner caps, capture and the defender leash.
+The tests cover trading, range positioning, line of sight, mines, boxes, knockback, stun, spawner caps, capture, the defender leash, and the physics (inertia by mass, units taking up space, shoving, wall collisions).

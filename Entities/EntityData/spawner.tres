@@ -6,6 +6,7 @@
 [resource]
 script = ExtResource("1_data")
 entity_name = "Spawner"
+body_radius = 26.0
 shell_type = 1
 sprite_texture = ExtResource("2_tex")
 pathing_weight = 30.0

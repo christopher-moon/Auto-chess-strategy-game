@@ -79,10 +79,15 @@ func spawn_entity(entity_name: String, pos: Vector2, team: Entity.Team, behavior
 	entity.position = pos
 	entity.current_grid_pos = map_manager.world_to_grid(pos)
 
-	# 3. Assign Visuals
+	# 3. Assign Visuals and body size
 	var sprite := entity.get_node_or_null("Sprite2D") as Sprite2D
 	if sprite and data.sprite_texture:
 		sprite.texture = data.sprite_texture
+	var collider := entity.get_node_or_null("CollisionShape2D") as CollisionShape2D
+	if collider and collider.shape is CircleShape2D:
+		# the template's shape is shared by every instance, so each entity gets its own copy
+		collider.shape = collider.shape.duplicate()
+		collider.shape.radius = data.body_radius
 
 	# 4. Add Components Additively
 	var comps_folder := entity.get_node("Components")
