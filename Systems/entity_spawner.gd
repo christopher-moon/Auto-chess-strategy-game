@@ -21,10 +21,9 @@ extends Node
 # entity resource files go here
 @export var entity_library: Array[EntityData]
 
-# behaviors given to fighting units whose data doesn't name one
-@export_category("Default Behaviors")
-@export var player_unit_behavior: Behavior
-@export var enemy_unit_behavior: Behavior
+# behavior given to fighting units when neither the spawn call nor their data names one. AI is never tied to team
+@export_category("Default Behavior")
+@export var default_unit_behavior: Behavior
 
 var world: World
 
@@ -47,6 +46,9 @@ func _ready() -> void:
 
 func has_entity(entity_name: String) -> bool:
 	return _db.has(entity_name)
+
+func get_data(entity_name: String) -> EntityData:
+	return _db.get(entity_name)
 
 func spawn_entity(entity_name: String, pos: Vector2, team: Entity.Team, behavior_override: Behavior = null) -> Entity:
 	var data: EntityData = _db.get(entity_name)
@@ -78,6 +80,7 @@ func spawn_entity(entity_name: String, pos: Vector2, team: Entity.Team, behavior
 	entity.targetable = data.targetable
 	entity.position = pos
 	entity.current_grid_pos = map_manager.world_to_grid(pos)
+	entity.home_tile = entity.current_grid_pos
 
 	# 3. Assign Visuals and body size
 	var sprite := entity.get_node_or_null("Sprite2D") as Sprite2D
@@ -102,13 +105,14 @@ func spawn_entity(entity_name: String, pos: Vector2, team: Entity.Team, behavior
 	if data.has_projectile:
 		entity.projectile = _add_component(projectile_comp_scene, comps_folder, entity, data)
 
-	# 5. AI: explicit behavior > data behavior > team default (for units that move and fight)
-	entity.behavior = behavior_override if behavior_override else data.behavior
-	if entity.behavior == null and data.has_movement and data.has_combat:
-		entity.behavior = player_unit_behavior if team == Entity.Team.PLAYER else enemy_unit_behavior
-	if entity.behavior and entity.combat:
-		entity.state_machine = entity.get_node("StateMachine")
-		entity.state_machine.setup(entity)
+	# 5. AI, for entities that fight: explicit behavior > data behavior > default (units that move)
+	if entity.combat:
+		entity.behavior = behavior_override if behavior_override else data.behavior
+		if entity.behavior == null and entity.movement:
+			entity.behavior = default_unit_behavior
+		if entity.behavior:
+			entity.state_machine = entity.get_node("StateMachine")
+			entity.state_machine.setup(entity)
 
 	# 6. Add to scene tree and register with Entity Manager
 	entity_container.add_child(entity)

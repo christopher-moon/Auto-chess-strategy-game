@@ -76,6 +76,8 @@ enum AttackType {MELEE, PROJECTILE, EXPLODE}
 @export_group("Spawner")
 @export var spawn_entity_name: String = "Melee"
 @export var spawn_max_count: int = 3
+# AI for the spawned units. empty = their own data's behavior, or the spawner's default
+@export var spawn_behavior: Behavior
 # seconds between spawns
 @export var spawn_interval: float = 4.0
 

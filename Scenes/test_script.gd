@@ -14,6 +14,11 @@ const SPAWN_KEYS := {
 # entities that always spawn as neutral, whatever team is selected
 const NEUTRAL_ENTITIES := ["Box"]
 const TEST_STUN_SECONDS := 2.0
+# AI given to placed units (and to units from placed spawners). A cycles through them, whatever the team
+const AI_CHOICES := {
+	"Attacker": preload("res://Behaviors/attacker.tres"),
+	"Defender": preload("res://Behaviors/defender.tres"),
+}
 
 @onready var spawner: EntitySpawner = $EntitySpawner
 @onready var entity_manager: EntityManager = $EntityManager
@@ -22,6 +27,7 @@ const TEST_STUN_SECONDS := 2.0
 @onready var level_manager: LevelManager = $LevelManager
 
 var selected_team: Entity.Team = Entity.Team.PLAYER
+var selected_ai: String = "Attacker"
 var _hud: Label
 var _overlay: DebugOverlay
 
@@ -53,6 +59,9 @@ func _unhandled_input(event: InputEvent) -> void:
 	match event.keycode:
 		KEY_TAB, KEY_T:
 			selected_team = Entity.Team.ENEMY if selected_team == Entity.Team.PLAYER else Entity.Team.PLAYER
+		KEY_A:
+			var names := AI_CHOICES.keys()
+			selected_ai = names[(names.find(selected_ai) + 1) % names.size()]
 		KEY_W:
 			map_manager.set_wall(tile, map_manager.is_walkable(tile))
 		KEY_O:
@@ -80,7 +89,12 @@ func _spawn_at(entity_name: String, tile: Vector2i) -> void:
 	if not map_manager.is_walkable(tile) or entity_manager.get_blocker_at(tile):
 		return
 	var team := Entity.Team.NEUTRAL if entity_name in NEUTRAL_ENTITIES else selected_team
-	spawner.spawn_entity(entity_name, map_manager.grid_to_world(tile), team)
+	var ai: Behavior = AI_CHOICES[selected_ai]
+	# entities with their own AI in their data (turrets, mines) keep it
+	var data := spawner.get_data(entity_name)
+	var entity := spawner.spawn_entity(entity_name, map_manager.grid_to_world(tile), team, ai if data and data.behavior == null else null)
+	if entity and entity.unit_spawner:
+		entity.unit_spawner.spawn_behavior = ai
 
 func _hud_text() -> String:
 	var lines: Array[String] = []
@@ -93,8 +107,8 @@ func _hud_text() -> String:
 			lines.append("VICTORY: %s   (R to restart)" % level_manager.end_reason)
 		LevelManager.LevelState.LOST:
 			lines.append("DEFEAT: %s   (R to restart)" % level_manager.end_reason)
-	lines.append("Team: %s   Line of sight: %s%s" % [Entity.Team.keys()[selected_team].capitalize(), "on" if map_manager.line_of_sight_enabled else "off", "   PAUSED" if not time_manager.is_ticking and level_manager.state <= LevelManager.LevelState.RUNNING else ""])
+	lines.append("Team: %s   AI: %s   Line of sight: %s%s" % [Entity.Team.keys()[selected_team].capitalize(), selected_ai, "on" if map_manager.line_of_sight_enabled else "off", "   PAUSED" if not time_manager.is_ticking and level_manager.state <= LevelManager.LevelState.RUNNING else ""])
 	lines.append("1 Melee  2 Ranged  3 Mine  4 Turret  5 Spawner  6 Box  7 Brute")
-	lines.append("Tab team  W wall  O objective  X delete  S stun")
+	lines.append("Tab team  A AI  W wall  O objective  X delete  S stun")
 	lines.append("L line of sight  H debug  Space pause  R restart")
 	return "\n".join(lines)

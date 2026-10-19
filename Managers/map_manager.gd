@@ -2,7 +2,6 @@
 class_name MapManager
 extends Node2D
 
-const UNREACHABLE := 1 << 30
 const WALL_SOURCE_ID := 1
 const OBJECTIVE_SOURCE_ID := 2
 
@@ -34,8 +33,6 @@ var _solid_shapes: Dictionary = {}
 
 var objective_tiles: Array[Vector2i] = []
 var _objective_lookup: Dictionary = {}
-# walking distance (in tiles) from every reachable tile to the nearest objective tile
-var _objective_distance: Dictionary = {}
 
 #on load, set up grid
 func _ready() -> void:
@@ -137,10 +134,6 @@ func get_line_tiles(from: Vector2i, to: Vector2i) -> Array[Vector2i]:
 func is_objective(grid_pos: Vector2i) -> bool:
 	return _objective_lookup.has(grid_pos)
 
-# walking distance to the nearest objective tile, or UNREACHABLE
-func distance_to_objective(grid_pos: Vector2i) -> int:
-	return _objective_distance.get(grid_pos, UNREACHABLE)
-
 # the objective tile that is cheapest to walk to (checks the few closest by straight distance)
 func find_nearest_objective_tile(from: Vector2i) -> Variant:
 	var candidates := objective_tiles.duplicate()
@@ -160,7 +153,7 @@ func find_nearest_objective_tile(from: Vector2i) -> Variant:
 			best = tile
 	return best
 
-# rebuild the objective lookup and distance field. call after painting objective tiles or walls
+# rebuild the objective lookup. call after painting objective tiles or walls
 func refresh_objectives() -> void:
 	objective_tiles.clear()
 	_objective_lookup.clear()
@@ -168,19 +161,6 @@ func refresh_objectives() -> void:
 		if is_walkable(cell):
 			objective_tiles.append(cell)
 			_objective_lookup[cell] = true
-
-	# breadth first search outwards from every objective tile over walkable ground
-	_objective_distance.clear()
-	var frontier: Array[Vector2i] = objective_tiles.duplicate()
-	for tile in frontier:
-		_objective_distance[tile] = 0
-	while not frontier.is_empty():
-		var tile: Vector2i = frontier.pop_front()
-		for offset in [Vector2i.UP, Vector2i.DOWN, Vector2i.LEFT, Vector2i.RIGHT]:
-			var next: Vector2i = tile + offset
-			if is_walkable(next) and not _objective_distance.has(next):
-				_objective_distance[next] = _objective_distance[tile] + 1
-				frontier.append(next)
 
 # --- RUNTIME EDITING (debug tools, and later level scripting) ---
 

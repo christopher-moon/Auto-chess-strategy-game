@@ -45,6 +45,8 @@ var pathing_weight: float = 1.0
 var blocks_movement: bool = false
 var blocks_line_of_sight: bool = false
 var targetable: bool = true
+# where the unit was spawned. defenders return here when out of combat
+var home_tile: Vector2i
 
 # status
 var is_alive: bool = true

@@ -1,26 +1,27 @@
-# defender_behavior: objective first. walks to the objective, and only fights while it can do so
-# from a tile within `leash_range` (walking distance) of an objective tile
+# defender_behavior: guards its home tile (where it was spawned). it fights enemies it can reach from a
+# tile within `leash_range` tiles of home, and walks back home whenever it is out of combat
 class_name DefenderBehavior
 extends Behavior
 
-@export var leash_range: int = 3
+# tiles from home a defender will go to fight
+@export var leash_range: float = 3.0
 
 func decide(entity: Entity) -> int:
 	var combat := entity.combat
-	var map := entity.world.map
 	_validate_target(entity)
 	_take_blocker_as_target(entity)
 
-	var near_objective := func(tile: Vector2i) -> bool: return map.distance_to_objective(tile) <= leash_range
+	var home := Vector2(entity.home_tile)
+	var near_home := func(tile: Vector2i) -> bool: return Vector2(tile).distance_to(home) <= leash_range
 
-	# only look for fights once we are guarding the objective
-	if not combat.has_valid_target() and near_objective.call(entity.current_grid_pos):
+	# only look for fights while guarding home
+	if not combat.has_valid_target() and near_home.call(entity.current_grid_pos):
 		combat.target = _acquire_target(entity, combat.threat_range)
 
 	if combat.has_valid_target():
 		# boxes in our way get broken wherever they are; enemies only get chased inside the leash
-		var allowed: Callable = near_objective if entity.is_hostile_to(combat.target) else Callable()
-		if allowed.is_valid() and not near_objective.call(entity.current_grid_pos) and not combat.can_attack(combat.target):
+		var allowed: Callable = near_home if entity.is_hostile_to(combat.target) else Callable()
+		if allowed.is_valid() and not near_home.call(entity.current_grid_pos) and not combat.can_attack(combat.target):
 			combat.clear_target()
 		else:
 			var state := _engage(entity, combat.target, allowed)
@@ -28,4 +29,10 @@ func decide(entity: Entity) -> int:
 				return state
 			combat.clear_target()
 
-	return _move_to_objective(entity)
+	return _return_home(entity)
+
+func _return_home(entity: Entity) -> int:
+	if entity.movement == null or entity.current_grid_pos == entity.home_tile and not entity.movement.is_moving():
+		return Id.IDLE
+	entity.movement.request_goal(entity.home_tile)
+	return Id.MOVING
