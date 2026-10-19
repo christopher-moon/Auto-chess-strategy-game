@@ -2,6 +2,7 @@
 
 [ext_resource type="Script" uid="uid://cdts3k2e06r5n" path="res://Entities/EntityScripts/base_entity.gd" id="1_d4qnp"]
 [ext_resource type="Texture2D" uid="uid://cx5uyuaei4od5" path="res://character.png" id="2_fgot4"]
+[ext_resource type="Script" path="res://States/state_machine.gd" id="3_state"]
 
 [node name="Trigger" type="Area2D" unique_id=1886372751]
 script = ExtResource("1_d4qnp")
@@ -17,3 +18,4 @@ texture = ExtResource("2_fgot4")
 [node name="Components" type="Node" parent="." unique_id=102585684]
 
 [node name="StateMachine" type="Node" parent="." unique_id=822958065]
+script = ExtResource("3_state")

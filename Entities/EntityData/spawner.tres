@@ -1,0 +1,19 @@
+[gd_resource type="Resource" script_class="EntityData" format=3]
+
+[ext_resource type="Script" uid="uid://dskc6o7hv3nnp" path="res://Entities/EntityData/entity_data.gd" id="1_data"]
+[ext_resource type="Texture2D" path="res://Art/spawner.png" id="2_tex"]
+
+[resource]
+script = ExtResource("1_data")
+entity_name = "Spawner"
+shell_type = 1
+sprite_texture = ExtResource("2_tex")
+pathing_weight = 30.0
+blocks_movement = true
+has_health = true
+has_spawner = true
+max_health = 25.0
+spawn_entity_name = "Melee"
+spawn_max_count = 3
+spawn_interval = 4.0
+metadata/_custom_type_script = "uid://dskc6o7hv3nnp"
