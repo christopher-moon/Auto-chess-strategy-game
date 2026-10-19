@@ -1,4 +1,4 @@
-[gd_resource type="Resource" script_class="EntityData" format=3 uid="uid://cqd6o3t0nh13w"]
+[gd_resource type="Resource" script_class="EntityData" format=3 uid="uid://dowwopsk77k32"]
 
 [ext_resource type="Script" uid="uid://dskc6o7hv3nnp" path="res://Entities/EntityData/entity_data.gd" id="1_data"]
 [ext_resource type="Texture2D" path="res://character.png" id="2_tex"]
