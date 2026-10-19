@@ -39,13 +39,20 @@ Units (actors) are `CharacterBody2D` circles (`body_radius`) with their own velo
 - `move_and_slide()` handles collisions with walls, holes and the map edge (`MapManager` builds a static collider per solid tile), structures and other units
 - walking into another unit shoves it by `mass / (your mass + their mass)`, so heavy units plough through light ones
 - a light separation force spreads crowds out so they don't jam
-- paths are 8-way, but a diagonal step never clips the corner of a wall or a pricey tile (mine, box); waypoints are string-pulled, so units walk straight across open ground
+- paths are 8-way, but a diagonal step never clips the corner of a wall or a pricey tile (mine, box); waypoints are string-pulled (up to 4 tiles ahead), so units walk straight across open ground
+- periodic re-paths are spread over different ticks per unit, so a big wave doesn't path all on the same frame
 
 ### Knockback
 
 A hit adds a push to the target's velocity: `velocity += direction × push / target mass`, and friction bleeds it off. Walls and other bodies stop it through normal collisions.
 
 `push = damage × push_per_damage + knockback_bonus`, and melee blows also add the attacker's own pushing force, `mass × acceleration × push_per_force`. `push_per_damage` and `push_per_force` are on the CombatManager node; `knockback_bonus` is per unit (negative for weaker shoves).
+
+`recoil` (per unit) is a set push the attacker takes away from its target with every attack, applied with the tick's other hits. Ranged units use it for a bow's kick.
+
+### Fighting on the move
+
+With `charge_while_attacking` on (the default, used by Melee and Brute), a unit in the Attacking state keeps running straight at its target at full speed, so fights turn into shoving scrums. With it off (Ranged), the unit holds its position while it shoots; if recoil or a shove carries it out of range, it walks back in.
 
 Units no longer stop exactly on tile centres; the tile a unit is "on" is the tile under its centre. Try the Brute (key 7, mass 3) against Melee units to see weight at work.
 
@@ -82,4 +89,4 @@ The level timer starts when the first Player unit is placed. The level is won by
 godot --headless --fixed-fps 60 --script res://Tests/engine_tests.gd
 ```
 
-The tests cover trading, range positioning, line of sight, mines, boxes, knockback, stun, spawner caps, capture, the defender leash, and the physics (inertia by mass, units taking up space, shoving, wall collisions).
+The tests cover trading, ranged units holding at range and recoiling, melee charging, line of sight, mines, boxes, knockback, stun, spawner caps, capture, the defender leash, and the physics (inertia by mass, units taking up space, shoving, wall collisions).

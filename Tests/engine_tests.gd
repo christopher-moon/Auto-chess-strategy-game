@@ -32,7 +32,9 @@ func _init() -> void:
 func _run() -> void:
 	for test in [
 		"test_melee_units_trade",
-		"test_ranged_stops_at_nearest_tile_in_range",
+		"test_ranged_holds_at_range",
+		"test_ranged_recoils_when_shooting",
+		"test_melee_charges_while_attacking",
 		"test_line_of_sight_blocks_detection",
 		"test_units_path_around_mines",
 		"test_mine_explodes_when_walked_over",
@@ -108,15 +110,42 @@ func test_melee_units_trade() -> void:
 	_check(death_ticks.has("a") and death_ticks.has("b"), "both units died")
 	_check(death_ticks.get("a", -1) == death_ticks.get("b", -2), "they died on the same tick (%s)" % death_ticks)
 
-func test_ranged_stops_at_nearest_tile_in_range() -> void:
+func test_ranged_holds_at_range() -> void:
 	var ranged := _spawn("Ranged", Vector2i(6, 10), Entity.Team.PLAYER)
 	var dummy := _spawn("Melee", Vector2i(12, 10), Entity.Team.ENEMY, Behavior.new())
 	dummy.health.max_health = 1000.0
 	dummy.health.current_health = 1000.0
-	await _wait(4.0)
+	var closest := 99
+	for i in 6 * FPS:
+		await process_frame
+		closest = mini(closest, dummy.current_grid_pos.x - ranged.current_grid_pos.x)
 	_check(ranged.combat.target == dummy, "ranged unit locked onto the dummy")
-	_check(ranged.current_grid_pos == Vector2i(8, 10), "stopped 4 tiles away, at (8, 10) (got %s)" % ranged.current_grid_pos)
+	_check(closest == 4, "never walked closer than its 4 tile range (closest %d)" % closest)
+	_check(ranged.current_grid_pos.x >= 7, "stayed in the fight, at %s" % ranged.current_grid_pos)
 	_check(dummy.health.current_health < 1000.0, "projectiles hit the dummy")
+
+func test_ranged_recoils_when_shooting() -> void:
+	var ranged := _spawn("Ranged", Vector2i(8, 10), Entity.Team.PLAYER, StationaryBehavior.new())
+	var dummy := _spawn("Melee", Vector2i(12, 10), Entity.Team.ENEMY, Behavior.new())
+	dummy.health.max_health = 1000.0
+	dummy.health.current_health = 1000.0
+	var start := ranged.global_position
+	await _wait(0.5)
+	_check(ranged.global_position.x < start.x - 3.0, "the shot kicked it backwards (%.1f px)" % (start.x - ranged.global_position.x))
+	_check(absf(ranged.global_position.y - start.y) < 1.0, "straight away from the target")
+
+func test_melee_charges_while_attacking() -> void:
+	var hitter := _spawn("Melee", Vector2i(8, 12), Entity.Team.PLAYER, AttackerBehavior.new())
+	var dummy := _spawn("Melee", Vector2i(9, 12), Entity.Team.ENEMY, Behavior.new())
+	dummy.health.max_health = 1000.0
+	dummy.health.current_health = 1000.0
+	var start := dummy.global_position
+	await _wait(1.0)
+	_check(hitter.state_machine.current_id == StateMachine.StateId.ATTACKING, "unit is attacking")
+	var gap := hitter.global_position.distance_to(dummy.global_position)
+	_check(gap < hitter.movement.radius + dummy.movement.radius + 2.0, "it ran into its target (%.1f px apart)" % gap)
+	await _wait(2.0)
+	_check(dummy.global_position.x > start.x + 20.0, "it kept driving the target back (%.1f px)" % (dummy.global_position.x - start.x))
 
 func test_line_of_sight_blocks_detection() -> void:
 	_wall(Vector2i(10, 10))

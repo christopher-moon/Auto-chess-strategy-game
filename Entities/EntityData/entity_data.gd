@@ -62,6 +62,10 @@ enum AttackType {MELEE, PROJECTILE, EXPLODE}
 # extra push on hit, on top of the natural push from damage (and, for melee, the attacker's mass × acceleration).
 # negative values push less than normal. measured like the natural push: velocity change × target mass
 @export var knockback_bonus: float = 0.0
+# keep running into the target while attacking (melee scrums). off = stand still and hold position (ranged)
+@export var charge_while_attacking: bool = true
+# push the attacker takes away from its target with every attack (e.g. a bow's kick). set value, not scaled by damage
+@export var recoil: float = 0.0
 # seconds
 @export var stun_duration: float = 0.0
 # explode only: radius in tiles

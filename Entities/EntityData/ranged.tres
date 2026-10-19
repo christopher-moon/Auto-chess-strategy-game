@@ -16,4 +16,6 @@ attack_type = 1
 attack_speed = 0.8
 attack_range = 4.0
 threat_range = 6.0
+charge_while_attacking = false
+recoil = 150.0
 metadata/_custom_type_script = "uid://dskc6o7hv3nnp"
